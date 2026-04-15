@@ -23,8 +23,17 @@ import {
   TrendingUp,
   MapPin,
   CircleDollarSign,
+  ArrowRight,
+  Search,
+  BarChart3,
+  House,
+  Landmark,
 } from "lucide-react";
 import "./App.css";
+
+import heroHouse from "./assets/hero-house.jpg";
+import kualaLumpurImg from "./assets/kuala-lumpur.jpg";
+import modernCondoImg from "./assets/modern-condo.jpg";
 
 const tabs = [
   { id: "dashboard", label: "Dashboard", icon: Home },
@@ -67,6 +76,24 @@ const stateChart = [
   { label: "Perak", avg: 430000 },
 ];
 
+const showcaseCards = [
+  {
+    title: "Instant AI Estimation",
+    text: "Get an estimated property value in seconds using structured housing inputs.",
+    icon: Brain,
+  },
+  {
+    title: "Malaysia-Focused Insights",
+    text: "Designed around Malaysian property data, market conditions, and state-level comparison.",
+    icon: Landmark,
+  },
+  {
+    title: "Future Value Outlook",
+    text: "Understand how value may grow over time through a simple projection experience.",
+    icon: TrendingUp,
+  },
+];
+
 function currency(n) {
   return new Intl.NumberFormat("en-MY", {
     style: "currency",
@@ -77,30 +104,23 @@ function currency(n) {
 
 function formatFeatureLabel(label) {
   if (!label) return "Other factor";
-
   if (label.startsWith("num__Median_PSF")) return "Median PSF";
   if (label.startsWith("num__Transactions")) return "Transactions";
-
   if (label.startsWith("cat__Type_")) {
     return `Property Type: ${label.replace("cat__Type_", "").replaceAll("_", " ")}`;
   }
-
   if (label.startsWith("cat__State_")) {
     return `State: ${label.replace("cat__State_", "").replaceAll("_", " ")}`;
   }
-
   if (label.startsWith("cat__Tenure_")) {
     return `Tenure: ${label.replace("cat__Tenure_", "").replaceAll("_", " ")}`;
   }
-
   if (label.startsWith("cat__Township_")) {
     return `Township: ${label.replace("cat__Township_", "").replaceAll("_", " ")}`;
   }
-
   if (label.startsWith("cat__Area_")) {
     return `Area: ${label.replace("cat__Area_", "").replaceAll("_", " ")}`;
   }
-
   return label.replace(/^cat__|^num__/, "").replaceAll("_", " ");
 }
 
@@ -175,13 +195,13 @@ export default function App() {
   });
 
   const [form, setForm] = useState({
-  State: "Selangor",
-  Type: "Condominium",
-  Tenure: "Freehold",
-  sqft: 1000,
-  medianPsf: 450,
-  transactions: 20,
-});
+    State: "Selangor",
+    Type: "Condominium",
+    Tenure: "Freehold",
+    sqft: 1000,
+    medianPsf: 450,
+    transactions: 20,
+  });
 
   const [result, setResult] = useState(null);
 
@@ -212,15 +232,15 @@ export default function App() {
         headers: {
           "Content-Type": "application/json",
         },
-       body: JSON.stringify({
-  Township: "Unknown",
-  Area: "Unknown",
-  State: form.State,
-  Tenure: form.Tenure,
-  Type: form.Type,
-  Median_PSF: Number(form.medianPsf),
-  Transactions: Number(form.transactions),
-}),
+        body: JSON.stringify({
+          Township: "Unknown",
+          Area: "Unknown",
+          State: form.State,
+          Tenure: form.Tenure,
+          Type: form.Type,
+          Median_PSF: Number(form.medianPsf),
+          Transactions: Number(form.transactions),
+        }),
       });
 
       const data = await response.json();
@@ -267,16 +287,16 @@ export default function App() {
   };
 
   const resetForm = () => {
-  setForm({
-    State: "Selangor",
-    Type: "Condominium",
-    Tenure: "Freehold",
-    sqft: 1000,
-    medianPsf: 450,
-    transactions: 20,
-  });
-  setResult(null);
-};
+    setForm({
+      State: "Selangor",
+      Type: "Condominium",
+      Tenure: "Freehold",
+      sqft: 1000,
+      medianPsf: 450,
+      transactions: 20,
+    });
+    setResult(null);
+  };
 
   return (
     <div className={`app-shell ${darkMode ? "dark" : ""}`}>
@@ -327,68 +347,130 @@ export default function App() {
                 key="dashboard"
                 initial={{ opacity: 0, y: 14 }}
                 animate={{ opacity: 1, y: 0 }}
+                className="dashboard-frontpage"
               >
-                <div className="section-head">
-                  <div>
-                    <h2>Overview Dashboard</h2>
-                    <p>A polished landing dashboard for your Final Year Project web application.</p>
+                <section className="front-hero card">
+                  <div className="front-hero-copy">
+                    <span className="hero-kicker">Property Intelligence Platform</span>
+                    <h2>Find smarter property value insights with RumahAI.</h2>
+                    <p>
+                      Explore estimated prices, compare state-level housing trends, and
+                      understand market movement through a clean front-page experience built
+                      for Malaysian users.
+                    </p>
+
+                    <div className="front-hero-actions">
+                      <button className="primary-btn" onClick={() => setActiveTab("predict")}>
+                        Start Predicting <ArrowRight size={16} />
+                      </button>
+                      <button className="secondary-btn" onClick={() => setActiveTab("trends")}>
+                        Explore Market Trends
+                      </button>
+                    </div>
+
+                    <div className="front-hero-badges">
+                      <span>AI valuation</span>
+                      <span>Malaysia-focused</span>
+                      <span>Explainable results</span>
+                    </div>
                   </div>
-                  <button className="primary-btn" onClick={() => setActiveTab("predict")}>
-                    Start Predicting <ChevronRight size={16} />
-                  </button>
-                </div>
 
-                <div className="stats-grid">
-                  <StatCard
-                    icon={Building2}
-                    label="System Type"
-                    value="ML Web App"
-                    sub="Interactive valuation platform"
-                  />
-                  <StatCard
-                    icon={ShieldCheck}
-                    label="Deployment Scope"
-                    value="Local Prototype"
-                    sub="Ready for FYP demo"
-                  />
-                  <StatCard
-                    icon={Brain}
-                    label="Core Capability"
-                    value="Price Prediction"
-                    sub="Malaysia-specific inputs"
-                  />
-                  <StatCard
-                    icon={Layers3}
-                    label="Explainability"
-                    value="Feature View"
-                    sub="Simple SHAP-style UI"
-                  />
-                </div>
+                  <div className="front-hero-image-wrap">
+                    <img src={heroHouse} alt="Featured property" className="front-hero-image" />
+                    <div className="front-hero-floating">
+                      <div className="floating-label">Top benchmark</div>
+                      <div className="floating-value">RM 820,000</div>
+                      <div className="floating-sub">Kuala Lumpur average</div>
+                    </div>
+                  </div>
+                </section>
 
-                <div className="two-grid">
-                  <div className="card">
-                    <h3>Average Estimated Prices by State</h3>
-                    <p className="muted">Professional dashboard card section for regional comparison.</p>
+                <section className="front-quick-grid">
+                  <div className="quick-card card">
+                    <div className="quick-card-top">
+                      <div className="quick-icon"><Search size={18} /></div>
+                      <span className="quick-tag">01</span>
+                    </div>
+                    <h3>Estimate Value</h3>
+                    <p>Get a fast estimated market price from a simple set of property details.</p>
+                  </div>
+
+                  <div className="quick-card card">
+                    <div className="quick-card-top">
+                      <div className="quick-icon"><BarChart3 size={18} /></div>
+                      <span className="quick-tag">02</span>
+                    </div>
+                    <h3>Compare States</h3>
+                    <p>See how house values differ across major Malaysian property markets.</p>
+                  </div>
+
+                  <div className="quick-card card">
+                    <div className="quick-card-top">
+                      <div className="quick-icon"><TrendingUp size={18} /></div>
+                      <span className="quick-tag">03</span>
+                    </div>
+                    <h3>Future Outlook</h3>
+                    <p>Understand projected price movement with simple long-term value charts.</p>
+                  </div>
+                </section>
+
+                <section className="front-showcase-grid">
+                  <div className="showcase-large card">
+                    <div className="showcase-title-row">
+                      <div>
+                        <span className="showcase-kicker">Market Snapshot</span>
+                        <h3>Average Estimated Prices by State</h3>
+                      </div>
+                    </div>
                     <MiniBarChart data={stateChart} />
                   </div>
 
-                  <div className="card hero-card">
-                    <div className="hero-icon">
-                      <Sparkles size={24} />
+                  <div className="showcase-side">
+                    <div className="showcase-image-card card">
+                      <img src={kualaLumpurImg} alt="Kuala Lumpur skyline" className="showcase-image" />
+                      <div className="showcase-overlay">
+                        <span className="showcase-kicker">Urban Market</span>
+                        <h3>Kuala Lumpur & Selangor</h3>
+                        <p>Popular high-demand regions with stronger average pricing signals.</p>
+                      </div>
                     </div>
-                    <h3>RumahAI Intelligent Prediction System</h3>
-                    <p className="hero-desc">
-                      A machine learning-powered platform for estimating Malaysian house prices
-                      with real-time inputs and explainable predictions.
-                    </p>
-                    <div className="hero-features">
-                      <div>✔ Real-time price prediction</div>
-                      <div>✔ Malaysia-focused dataset</div>
-                      <div>✔ Explainable AI output</div>
-                      <div>✔ Interactive web interface</div>
+
+                    <div className="showcase-info-grid">
+                      {showcaseCards.map((item) => {
+                        const Icon = item.icon;
+                        return (
+                          <div key={item.title} className="showcase-info-card card">
+                            <div className="showcase-info-icon">
+                              <Icon size={18} />
+                            </div>
+                            <h4>{item.title}</h4>
+                            <p>{item.text}</p>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
-                </div>
+                </section>
+
+                <section className="front-bottom-grid">
+                  <div className="bottom-feature card">
+                    <div className="bottom-feature-copy">
+                      <span className="showcase-kicker">User Journey</span>
+                      <h3>Built for a smoother front-page experience</h3>
+                      <p>
+                        RumahAI is structured to feel less like a student dashboard and more
+                        like a modern property platform, with clearer entry points and stronger
+                        visual hierarchy.
+                      </p>
+                      <button className="primary-btn" onClick={() => setActiveTab("predict")}>
+                        Try Prediction
+                      </button>
+                    </div>
+                    <div className="bottom-feature-image-wrap">
+                      <img src={modernCondoImg} alt="Modern condominium" className="bottom-feature-image" />
+                    </div>
+                  </div>
+                </section>
               </motion.div>
             )}
 
@@ -411,8 +493,6 @@ export default function App() {
                 <div className="two-grid">
                   <div className="card">
                     <h3>Property Details</h3>
-
-            
 
                     <label>State</label>
                     <select
@@ -679,14 +759,19 @@ export default function App() {
                     </p>
                   </div>
 
-                  <div className="card hero-card">
-                    <div className="hero-icon">
-                      <Sparkles size={24} />
-                    </div>
-                    <h3>Professional FYP Presentation UI</h3>
-                    <p>
-                      Use this section for your elevator pitch, methodology summary, or project importance.
+                  <div className="card info-card">
+                    <h3>Why RumahAI?</h3>
+                    <p className="muted info-copy">
+                      RumahAI helps users understand estimated property value using a cleaner, more
+                      transparent interface focused on price guidance, market comparison, and future outlook.
                     </p>
+
+                    <div className="info-pills">
+                      <span>Real-time estimate</span>
+                      <span>Malaysia-focused</span>
+                      <span>Explainable output</span>
+                      <span>Interactive interface</span>
+                    </div>
                   </div>
                 </div>
               </motion.div>

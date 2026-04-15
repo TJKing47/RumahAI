@@ -1,106 +1,106 @@
 from __future__ import annotations
 
-import math
-
-import pandas as pd
-import streamlit as st
+from flask import Flask, jsonify, request
+from flask_cors import CORS
 
 from src.modeling import get_model_explanation, load_artifacts, predict_price
 
-st.set_page_config(page_title="RumahAI", page_icon="🏠", layout="wide")
+app = Flask(__name__)
+CORS(app)
 
 
-def format_myr(value: float) -> str:
-    return f"RM {value:,.0f}"
+@app.get("/")
+def home():
+    return jsonify({
+        "message": "RumahAI Flask API is running"
+    })
 
 
-def main() -> None:
-    st.title("🏠 RumahAI")
-    st.caption("Predictive House Price Estimation in Malaysia")
-
+@app.get("/health")
+def health():
     try:
         _, metadata = load_artifacts()
+        return jsonify({
+            "status": "ok",
+            "model_loaded": True,
+            "best_model": metadata.get("best_model_name", "unknown")
+        })
     except FileNotFoundError:
-        st.error("Model not found. Run `python train_model.py` in the terminal first.")
-        st.code("python train_model.py")
-        st.stop()
+        return jsonify({
+            "status": "warning",
+            "model_loaded": False,
+            "message": "Model artifacts not found. Run python train_model.py first."
+        }), 200
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "model_loaded": False,
+            "message": str(e)
+        }), 500
 
-    categories = metadata["categories"]
-    metrics = metadata["metrics"]
-    best_model_name = metadata["best_model_name"]
 
-    with st.sidebar:
-        st.header("Model Info")
-        st.write(f"**Selected model:** {best_model_name}")
-        st.write("**Metrics**")
-        best_metrics = metrics[best_model_name]
-        st.write(f"RMSE: {best_metrics['RMSE']:,.2f}")
-        st.write(f"MAE: {best_metrics['MAE']:,.2f}")
-        st.write(f"R²: {best_metrics['R2']:.4f}")
-        st.info("This app uses the Kaggle dataset `lyhatt/house-prices-in-malaysia-2025`.")
+@app.post("/predict")
+def predict():
+    try:
+        data = request.get_json()
 
-    st.subheader("Enter property details")
-    left, right = st.columns(2)
+        if not data:
+            return jsonify({"error": "No JSON body provided"}), 400
 
-    with left:
-        township = st.selectbox("Township", categories["Township"])
-        area = st.selectbox("Area", categories["Area"])
-        state = st.selectbox("State", categories["State"])
-        tenure = st.selectbox("Tenure", categories["Tenure"])
+        required_fields = [
+            "Township",
+            "Area",
+            "State",
+            "Tenure",
+            "Type",
+            "Median_PSF",
+            "Transactions",
+        ]
 
-    with right:
-        property_type = st.selectbox("Type", categories["Type"])
-        median_psf = st.number_input(
-            "Median PSF (RM)", min_value=1.0, max_value=5000.0, value=300.0, step=1.0
-        )
-        transactions = st.number_input(
-            "Transactions", min_value=0, max_value=10000, value=50, step=1
-        )
+        missing = [field for field in required_fields if field not in data]
+        if missing:
+            return jsonify({
+                "error": f"Missing required fields: {missing}"
+            }), 400
 
-    submitted = st.button("Predict Price", type="primary", use_container_width=True)
-
-    if submitted:
         input_data = {
-            "Township": township,
-            "Area": area,
-            "State": state,
-            "Tenure": tenure,
-            "Type": property_type,
-            "Median_PSF": float(median_psf),
-            "Transactions": int(transactions),
+            "Township": str(data["Township"]).strip(),
+            "Area": str(data["Area"]).strip(),
+            "State": str(data["State"]).strip(),
+            "Tenure": str(data["Tenure"]).strip(),
+            "Type": str(data["Type"]).strip(),
+            "Median_PSF": float(data["Median_PSF"]),
+            "Transactions": float(data["Transactions"]),
         }
 
-        try:
-            prediction = predict_price(input_data)
-            st.success("Prediction generated successfully.")
-            st.metric("Predicted Median Price", format_myr(prediction))
+        if input_data["Median_PSF"] <= 0:
+            return jsonify({"error": "Median_PSF must be greater than 0"}), 400
 
-            approx_size = prediction / median_psf if median_psf else math.nan
-            cols = st.columns(3)
-            cols[0].metric("Median PSF Used", f"RM {median_psf:,.0f}")
-            cols[1].metric("Transactions", f"{transactions:,}")
-            cols[2].metric(
-                "Implied Approx. Size",
-                f"{approx_size:,.0f} sqft" if not math.isnan(approx_size) else "N/A",
-            )
+        if input_data["Transactions"] < 0:
+            return jsonify({"error": "Transactions cannot be negative"}), 400
 
-            st.subheader("Prediction Explanation")
-            explanation = get_model_explanation(input_data)
-            if explanation:
-                exp_df = pd.DataFrame(explanation, columns=["Feature", "Contribution Score"])
-                st.bar_chart(exp_df.set_index("Feature"))
-                st.caption("Higher bars suggest a stronger estimated influence on this prediction.")
-            else:
-                st.info("Explanation is not available for the selected model.")
+        predicted_price = predict_price(input_data)
+        explanation = get_model_explanation(input_data)
 
-        except Exception as exc:
-            st.error(f"Prediction failed: {exc}")
+        formatted_explanation = [
+            {"feature": feature, "importance": importance}
+            for feature, importance in explanation
+        ]
 
-    st.markdown("---")
-    st.write(
-        "Built to match your FYP direction: user input, validation, preprocessing, model loading, house price prediction, and clear output."
-    )
+        return jsonify({
+            "predicted_price": round(predicted_price, 2),
+            "explanation": formatted_explanation
+        })
+
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except FileNotFoundError:
+        return jsonify({
+            "error": "Model artifacts not found. Run python train_model.py first."
+        }), 500
+    except Exception as e:
+        return jsonify({"error": f"Server error: {str(e)}"}), 500
 
 
 if __name__ == "__main__":
-    main()
+    app.run(debug=True, host="127.0.0.1", port=5000)

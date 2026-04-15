@@ -173,14 +173,16 @@ export default function App() {
     return localStorage.getItem("rumahai-dark-mode") === "true";
   });
 
-  const [form, setForm] = useState({
-    state: "Selangor",
-    type: "Condominium",
-    tenure: "Freehold",
-    sqft: 1000,
-    medianPsf: 450,
-    transactions: 20,
-  });
+ const [form, setForm] = useState({
+  Township: "Unknown",
+  Area: "Unknown",
+  State: "Selangor",
+  Type: "Condominium",
+  Tenure: "Freehold",
+  sqft: 1000,
+  medianPsf: 450,
+  transactions: 20,
+});
 
   const [result, setResult] = useState(null);
 
@@ -196,65 +198,65 @@ export default function App() {
     return errors;
   }, [form]);
 
-  const estimatePrice = () => {
-    if (validation.length) return;
+  const estimatePrice = async () => {
+  if (validation.length) return;
 
-    const base = form.sqft * form.medianPsf;
-    const stateAdj = (stateMultipliers[form.state] - 1) * base;
-    const typeAdj = (typeMultipliers[form.type] - 1) * base;
-    const tenureAdj = (tenureMultipliers[form.tenure] - 1) * base;
-    const marketAdj = Math.min(form.transactions, 50) * 3500;
-    const total = Math.max(80000, base + stateAdj + typeAdj + tenureAdj + marketAdj);
+  try {
+    const response = await fetch("http://127.0.0.1:5000/predict", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        Township: form.Township,
+        Area: form.Area,
+        State: form.State,
+        Tenure: form.Tenure,
+        Type: form.Type,
+        Median_PSF: Number(form.medianPsf),
+        Transactions: Number(form.transactions),
+      }),
+    });
 
-    const contributions = [
-      { label: "Built-up size and PSF", value: base },
-      { label: "Location impact", value: stateAdj },
-      { label: "Property type impact", value: typeAdj },
-      { label: "Tenure impact", value: tenureAdj },
-      { label: "Market demand activity", value: marketAdj },
-    ];
+    const data = await response.json();
 
-    const sorted = [...contributions].sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
-    const maxAbs = Math.max(...sorted.map((x) => Math.abs(x.value)));
+    if (!response.ok) {
+      alert(data.error || "Prediction failed");
+      return;
+    }
 
-    const stateAverage =
-      stateChart.find((x) => x.label === form.state)?.avg ?? Math.round(total * 0.95);
-
-    const comparisonPct = ((total - stateAverage) / stateAverage) * 100;
-
-    let pricingLabel = "Fairly Priced";
-    if (comparisonPct > 10) pricingLabel = "Premium Area Estimate";
-    if (comparisonPct < -10) pricingLabel = "Value-Friendly Estimate";
-
-    const baseGrowth =
-      form.state === "Kuala Lumpur" ? 0.055 :
-      form.state === "Selangor" ? 0.048 :
-      form.state === "Penang" ? 0.045 :
-      0.038;
-
-    const futureTrend = [1, 2, 3, 4, 5].map((year) => ({
-      year: `${year}Y`,
-      value: Math.round(total * Math.pow(1 + baseGrowth, year)),
-    }));
+    const predicted = data.predicted_price;
 
     setResult({
-      predictedPrice: Math.round(total),
-      estimatedRangeLow: Math.round(total * 0.93),
-      estimatedRangeHigh: Math.round(total * 1.07),
-      pricePerSqft: Math.round(total / form.sqft),
-      confidence: form.transactions >= 15 ? "Higher confidence" : form.transactions >= 8 ? "Moderate confidence" : "Lower confidence",
-      pricingLabel,
-      stateAverage,
-      comparisonPct,
-      futureTrend,
-      contributions: sorted.map((x) => ({
-        ...x,
-        width: Math.max(8, Math.round((Math.abs(x.value) / maxAbs) * 100)),
+      predictedPrice: Math.round(predicted),
+      estimatedRangeLow: Math.round(predicted * 0.93),
+      estimatedRangeHigh: Math.round(predicted * 1.07),
+      pricePerSqft: Math.round(predicted / form.sqft),
+      confidence: form.transactions >= 15
+        ? "Higher confidence"
+        : form.transactions >= 8
+        ? "Moderate confidence"
+        : "Lower confidence",
+      pricingLabel: "AI Estimated Value",
+      stateAverage: predicted * 0.95,
+      comparisonPct: 5.0,
+      futureTrend: [1, 2, 3, 4, 5].map((year) => ({
+        year: `${year}Y`,
+        value: Math.round(predicted * Math.pow(1.045, year)),
+      })),
+      contributions: (data.explanation || []).map((item, index) => ({
+        label: item.feature,
+        value: item.importance,
+        width: Math.max(8, 100 - index * 10),
       })),
     });
 
     setActiveTab("predict");
-  };
+  } catch (error) {
+    alert("Could not connect to Flask backend.");
+    console.error(error);
+  }
+};
 
   const resetForm = () => {
     setForm({

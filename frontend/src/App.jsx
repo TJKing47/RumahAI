@@ -59,34 +59,6 @@ const propertyTypes = [
 
 const tenures = ["Freehold", "Leasehold"];
 
-const stateMultipliers = {
-  "Kuala Lumpur": 1.35,
-  Selangor: 1.2,
-  Penang: 1.12,
-  Johor: 1.08,
-  Perak: 0.9,
-  "Negeri Sembilan": 0.92,
-  Melaka: 0.95,
-  Kedah: 0.88,
-  Pahang: 0.9,
-  Sabah: 0.97,
-  Sarawak: 0.98,
-};
-
-const typeMultipliers = {
-  Condominium: 1.1,
-  Apartment: 0.9,
-  "Terrace House": 1.0,
-  "Semi-Detached": 1.3,
-  Bungalow: 1.6,
-  Townhouse: 1.05,
-};
-
-const tenureMultipliers = {
-  Freehold: 1.08,
-  Leasehold: 0.95,
-};
-
 const stateChart = [
   { label: "Kuala Lumpur", avg: 820000 },
   { label: "Selangor", avg: 690000 },
@@ -101,6 +73,35 @@ function currency(n) {
     currency: "MYR",
     maximumFractionDigits: 0,
   }).format(n || 0);
+}
+
+function formatFeatureLabel(label) {
+  if (!label) return "Other factor";
+
+  if (label.startsWith("num__Median_PSF")) return "Median PSF";
+  if (label.startsWith("num__Transactions")) return "Transactions";
+
+  if (label.startsWith("cat__Type_")) {
+    return `Property Type: ${label.replace("cat__Type_", "").replaceAll("_", " ")}`;
+  }
+
+  if (label.startsWith("cat__State_")) {
+    return `State: ${label.replace("cat__State_", "").replaceAll("_", " ")}`;
+  }
+
+  if (label.startsWith("cat__Tenure_")) {
+    return `Tenure: ${label.replace("cat__Tenure_", "").replaceAll("_", " ")}`;
+  }
+
+  if (label.startsWith("cat__Township_")) {
+    return `Township: ${label.replace("cat__Township_", "").replaceAll("_", " ")}`;
+  }
+
+  if (label.startsWith("cat__Area_")) {
+    return `Area: ${label.replace("cat__Area_", "").replaceAll("_", " ")}`;
+  }
+
+  return label.replace(/^cat__|^num__/, "").replaceAll("_", " ");
 }
 
 function MiniBarChart({ data }) {
@@ -173,9 +174,7 @@ export default function App() {
     return localStorage.getItem("rumahai-dark-mode") === "true";
   });
 
-const [form, setForm] = useState({
-  Township: "",
-  Area: "",
+  const [form, setForm] = useState({
   State: "Selangor",
   Type: "Condominium",
   Tenure: "Freehold",
@@ -192,83 +191,92 @@ const [form, setForm] = useState({
 
   const validation = useMemo(() => {
     const errors = [];
-    if (!form.sqft || form.sqft < 200) errors.push("Built-up size should be at least 200 sqft.");
-    if (!form.medianPsf || form.medianPsf < 50) errors.push("Median PSF should be at least RM50.");
-    if (form.transactions < 1) errors.push("Transactions should be at least 1.");
+    if (!form.sqft || form.sqft < 200) {
+      errors.push("Built-up size should be at least 200 sqft.");
+    }
+    if (!form.medianPsf || form.medianPsf < 50) {
+      errors.push("Median PSF should be at least RM50.");
+    }
+    if (form.transactions < 1) {
+      errors.push("Transactions should be at least 1.");
+    }
     return errors;
   }, [form]);
 
   const estimatePrice = async () => {
-  if (validation.length) return;
+    if (validation.length) return;
 
-  try {
-    const response = await fetch("http://127.0.0.1:5000/predict", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-  Township: form.Township || "Unknown",
-  Area: form.Area || "Unknown",
+    try {
+      const response = await fetch("http://127.0.0.1:5000/predict", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+       body: JSON.stringify({
+  Township: "Unknown",
+  Area: "Unknown",
   State: form.State,
   Tenure: form.Tenure,
   Type: form.Type,
   Median_PSF: Number(form.medianPsf),
   Transactions: Number(form.transactions),
-})
-    });
+}),
+      });
 
-    const data = await response.json();
+      const data = await response.json();
 
-    if (!response.ok) {
-      alert(data.error || "Prediction failed");
-      return;
+      if (!response.ok) {
+        alert(data.error || "Prediction failed");
+        return;
+      }
+
+      const predicted = Number(data.predicted_price);
+
+      setResult({
+        predictedPrice: Math.round(predicted),
+        estimatedRangeLow: Math.round(predicted * 0.93),
+        estimatedRangeHigh: Math.round(predicted * 1.07),
+        pricePerSqft: Math.round(predicted / Number(form.sqft)),
+        confidence:
+          form.transactions >= 15
+            ? "Higher confidence"
+            : form.transactions >= 8
+            ? "Moderate confidence"
+            : "Lower confidence",
+        pricingLabel: "AI Estimated Value",
+        stateAverage: predicted * 0.95,
+        comparisonPct: 5.0,
+        futureTrend: [1, 2, 3, 4, 5].map((year) => ({
+          year: `${year}Y`,
+          value: Math.round(predicted * Math.pow(1.045, year)),
+        })),
+        contributions: (data.explanation || [])
+          .filter((item) => Number(item.importance) > 0)
+          .map((item, index) => ({
+            label: formatFeatureLabel(item.feature),
+            value: Number(item.importance),
+            width: Math.max(8, 100 - index * 10),
+          })),
+      });
+
+      setActiveTab("predict");
+    } catch (error) {
+      alert("Could not connect to Flask backend.");
+      console.error(error);
     }
-
-    const predicted = data.predicted_price;
-
-    setResult({
-      predictedPrice: Math.round(predicted),
-      estimatedRangeLow: Math.round(predicted * 0.93),
-      estimatedRangeHigh: Math.round(predicted * 1.07),
-      pricePerSqft: Math.round(predicted / form.sqft),
-      confidence: form.transactions >= 15
-        ? "Higher confidence"
-        : form.transactions >= 8
-        ? "Moderate confidence"
-        : "Lower confidence",
-      pricingLabel: "AI Estimated Value",
-      stateAverage: predicted * 0.95,
-      comparisonPct: 5.0,
-      futureTrend: [1, 2, 3, 4, 5].map((year) => ({
-        year: `${year}Y`,
-        value: Math.round(predicted * Math.pow(1.045, year)),
-      })),
-      contributions: (data.explanation || []).map((item, index) => ({
-        label: item.feature,
-        value: item.importance,
-        width: Math.max(8, 100 - index * 10),
-      })),
-    });
-
-    setActiveTab("predict");
-  } catch (error) {
-    alert("Could not connect to Flask backend.");
-    console.error(error);
-  }
-};
+  };
 
   const resetForm = () => {
-    setForm({
-      state: "Selangor",
-      type: "Condominium",
-      tenure: "Freehold",
-      sqft: 1000,
-      medianPsf: 450,
-      transactions: 20,
-    });
-    setResult(null);
-  };
+  setForm({
+    State: "Selangor",
+    Type: "Condominium",
+    Tenure: "Freehold",
+    sqft: 1000,
+    medianPsf: 450,
+    transactions: 20,
+  });
+  setResult(null);
+};
 
   return (
     <div className={`app-shell ${darkMode ? "dark" : ""}`}>
@@ -315,7 +323,11 @@ const [form, setForm] = useState({
         <div className="content-area">
           <AnimatePresence mode="wait">
             {activeTab === "dashboard" && (
-              <motion.div key="dashboard" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}>
+              <motion.div
+                key="dashboard"
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
                 <div className="section-head">
                   <div>
                     <h2>Overview Dashboard</h2>
@@ -327,10 +339,30 @@ const [form, setForm] = useState({
                 </div>
 
                 <div className="stats-grid">
-                  <StatCard icon={Building2} label="System Type" value="ML Web App" sub="Interactive valuation platform" />
-                  <StatCard icon={ShieldCheck} label="Deployment Scope" value="Local Prototype" sub="Ready for FYP demo" />
-                  <StatCard icon={Brain} label="Core Capability" value="Price Prediction" sub="Malaysia-specific inputs" />
-                  <StatCard icon={Layers3} label="Explainability" value="Feature View" sub="Simple SHAP-style UI" />
+                  <StatCard
+                    icon={Building2}
+                    label="System Type"
+                    value="ML Web App"
+                    sub="Interactive valuation platform"
+                  />
+                  <StatCard
+                    icon={ShieldCheck}
+                    label="Deployment Scope"
+                    value="Local Prototype"
+                    sub="Ready for FYP demo"
+                  />
+                  <StatCard
+                    icon={Brain}
+                    label="Core Capability"
+                    value="Price Prediction"
+                    sub="Malaysia-specific inputs"
+                  />
+                  <StatCard
+                    icon={Layers3}
+                    label="Explainability"
+                    value="Feature View"
+                    sub="Simple SHAP-style UI"
+                  />
                 </div>
 
                 <div className="two-grid">
@@ -361,7 +393,11 @@ const [form, setForm] = useState({
             )}
 
             {activeTab === "predict" && (
-              <motion.div key="predict" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}>
+              <motion.div
+                key="predict"
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
                 <div className="section-head">
                   <div>
                     <h2>Estimate Property Value</h2>
@@ -376,27 +412,44 @@ const [form, setForm] = useState({
                   <div className="card">
                     <h3>Property Details</h3>
 
+            
+
                     <label>State</label>
-                    <select value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })}>
+                    <select
+                      value={form.State}
+                      onChange={(e) => setForm({ ...form, State: e.target.value })}
+                    >
                       {states.map((s) => (
-                        <option key={s} value={s}>{s}</option>
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
                       ))}
                     </select>
 
                     <div className="form-grid">
                       <div>
                         <label>Property Type</label>
-                        <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+                        <select
+                          value={form.Type}
+                          onChange={(e) => setForm({ ...form, Type: e.target.value })}
+                        >
                           {propertyTypes.map((t) => (
-                            <option key={t} value={t}>{t}</option>
+                            <option key={t} value={t}>
+                              {t}
+                            </option>
                           ))}
                         </select>
                       </div>
                       <div>
                         <label>Tenure</label>
-                        <select value={form.tenure} onChange={(e) => setForm({ ...form, tenure: e.target.value })}>
+                        <select
+                          value={form.Tenure}
+                          onChange={(e) => setForm({ ...form, Tenure: e.target.value })}
+                        >
                           {tenures.map((t) => (
-                            <option key={t} value={t}>{t}</option>
+                            <option key={t} value={t}>
+                              {t}
+                            </option>
                           ))}
                         </select>
                       </div>
@@ -405,27 +458,47 @@ const [form, setForm] = useState({
                     <div className="form-grid-3">
                       <div>
                         <label>Built-up Size (sqft)</label>
-                        <input type="number" value={form.sqft} onChange={(e) => setForm({ ...form, sqft: Number(e.target.value) })} />
+                        <input
+                          type="number"
+                          value={form.sqft}
+                          onChange={(e) => setForm({ ...form, sqft: Number(e.target.value) })}
+                        />
                       </div>
                       <div>
                         <label>Median PSF (RM)</label>
-                        <input type="number" value={form.medianPsf} onChange={(e) => setForm({ ...form, medianPsf: Number(e.target.value) })} />
+                        <input
+                          type="number"
+                          value={form.medianPsf}
+                          onChange={(e) => setForm({ ...form, medianPsf: Number(e.target.value) })}
+                        />
                       </div>
                       <div>
                         <label>Transactions</label>
-                        <input type="number" value={form.transactions} onChange={(e) => setForm({ ...form, transactions: Number(e.target.value) })} />
+                        <input
+                          type="number"
+                          value={form.transactions}
+                          onChange={(e) =>
+                            setForm({ ...form, transactions: Number(e.target.value) })
+                          }
+                        />
                       </div>
                     </div>
 
                     {validation.length > 0 && (
                       <div className="error-box">
-                        {validation.map((err) => <div key={err}>• {err}</div>)}
+                        {validation.map((err) => (
+                          <div key={err}>• {err}</div>
+                        ))}
                       </div>
                     )}
 
                     <div className="btn-row">
-                      <button className="primary-btn" onClick={estimatePrice}>Get Estimate</button>
-                      <button className="secondary-btn" onClick={resetForm}>Clear Form</button>
+                      <button className="primary-btn" onClick={estimatePrice}>
+                        Get Estimate
+                      </button>
+                      <button className="secondary-btn" onClick={resetForm}>
+                        Clear Form
+                      </button>
                     </div>
                   </div>
 
@@ -438,7 +511,8 @@ const [form, setForm] = useState({
                             <div className="muted-light">Estimated property value</div>
                             <div className="result-price">{currency(result.predictedPrice)}</div>
                             <div className="muted-light">
-                              Likely range: {currency(result.estimatedRangeLow)} — {currency(result.estimatedRangeHigh)}
+                              Likely range: {currency(result.estimatedRangeLow)} —{" "}
+                              {currency(result.estimatedRangeHigh)}
                             </div>
                           </div>
 
@@ -460,9 +534,11 @@ const [form, setForm] = useState({
                           <div className="insight-strip">
                             <MapPin size={16} />
                             <span>
-                              Compared with the average in {form.state}, this estimate is{" "}
+                              Compared with the average in {form.State}, this estimate is{" "}
                               <strong>
-                                {result.comparisonPct >= 0 ? `${result.comparisonPct.toFixed(1)}% higher` : `${Math.abs(result.comparisonPct).toFixed(1)}% lower`}
+                                {result.comparisonPct >= 0
+                                  ? `${result.comparisonPct.toFixed(1)}% higher`
+                                  : `${Math.abs(result.comparisonPct).toFixed(1)}% lower`}
                               </strong>.
                             </span>
                           </div>
@@ -475,28 +551,28 @@ const [form, setForm] = useState({
                     </div>
 
                     <div className="card">
-                      <h3>Why this estimate?</h3>
+                      <h3>Top factors affecting this estimate</h3>
                       {result ? (
                         <div className="chart-list">
-                          {result.contributions.map((item) => (
-                            <div key={item.label} className="chart-item">
-                              <div className="chart-row">
-                                <span>{item.label}</span>
-                                <strong>
-                                  {item.value >= 0 ? "+" : "-"}
-                                  {currency(Math.abs(item.value))}
-                                </strong>
+                          {result.contributions
+                            .filter((item) => item.value > 0)
+                            .slice(0, 5)
+                            .map((item) => (
+                              <div key={item.label} className="chart-item">
+                                <div className="chart-row">
+                                  <span>{item.label}</span>
+                                  <strong>+{currency(Math.abs(item.value))}</strong>
+                                </div>
+                                <div className="chart-track">
+                                  <motion.div
+                                    initial={{ width: 0 }}
+                                    animate={{ width: `${item.width}%` }}
+                                    transition={{ duration: 0.7 }}
+                                    className="chart-fill"
+                                  />
+                                </div>
                               </div>
-                              <div className="chart-track">
-                                <motion.div
-                                  initial={{ width: 0 }}
-                                  animate={{ width: `${item.width}%` }}
-                                  transition={{ duration: 0.7 }}
-                                  className="chart-fill"
-                                />
-                              </div>
-                            </div>
-                          ))}
+                            ))}
                         </div>
                       ) : (
                         <div className="placeholder-box">
@@ -510,7 +586,11 @@ const [form, setForm] = useState({
             )}
 
             {activeTab === "trends" && (
-              <motion.div key="trends" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}>
+              <motion.div
+                key="trends"
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
                 <div className="section-head">
                   <div>
                     <h2>Market Trends & Future Outlook</h2>
@@ -519,10 +599,30 @@ const [form, setForm] = useState({
                 </div>
 
                 <div className="stats-grid">
-                  <StatCard icon={TrendingUp} label="Expected 5-Year Outlook" value="Positive Growth" sub="Based on current estimate scenario" />
-                  <StatCard icon={CircleDollarSign} label="Current State Average" value={currency(result?.stateAverage || 690000)} sub="Comparison baseline" />
-                  <StatCard icon={MapPin} label="Selected State" value={form.state} sub="Used in estimate and outlook" />
-                  <StatCard icon={Brain} label="Forecast Mode" value="Scenario Based" sub="Conservative long-term projection" />
+                  <StatCard
+                    icon={TrendingUp}
+                    label="Expected 5-Year Outlook"
+                    value="Positive Growth"
+                    sub="Based on current estimate scenario"
+                  />
+                  <StatCard
+                    icon={CircleDollarSign}
+                    label="Current State Average"
+                    value={currency(result?.stateAverage || 690000)}
+                    sub="Comparison baseline"
+                  />
+                  <StatCard
+                    icon={MapPin}
+                    label="Selected State"
+                    value={form.State}
+                    sub="Used in estimate and outlook"
+                  />
+                  <StatCard
+                    icon={Brain}
+                    label="Forecast Mode"
+                    value="Scenario Based"
+                    sub="Conservative long-term projection"
+                  />
                 </div>
 
                 <div className="two-grid">
@@ -552,7 +652,11 @@ const [form, setForm] = useState({
             )}
 
             {activeTab === "about" && (
-              <motion.div key="about" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}>
+              <motion.div
+                key="about"
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
                 <div className="section-head">
                   <div>
                     <h2>About RumahAI</h2>
@@ -589,7 +693,11 @@ const [form, setForm] = useState({
             )}
 
             {activeTab === "profile" && (
-              <motion.div key="profile" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}>
+              <motion.div
+                key="profile"
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
                 <div className="section-head">
                   <div>
                     <h2>Developer / Student Profile</h2>

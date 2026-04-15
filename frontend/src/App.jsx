@@ -173,9 +173,9 @@ export default function App() {
     return localStorage.getItem("rumahai-dark-mode") === "true";
   });
 
- const [form, setForm] = useState({
-  Township: "Unknown",
-  Area: "Unknown",
+const [form, setForm] = useState({
+  Township: "",
+  Area: "",
   State: "Selangor",
   Type: "Condominium",
   Tenure: "Freehold",
@@ -208,14 +208,14 @@ export default function App() {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        Township: form.Township,
-        Area: form.Area,
-        State: form.State,
-        Tenure: form.Tenure,
-        Type: form.Type,
-        Median_PSF: Number(form.medianPsf),
-        Transactions: Number(form.transactions),
-      }),
+  Township: form.Township || "Unknown",
+  Area: form.Area || "Unknown",
+  State: form.State,
+  Tenure: form.Tenure,
+  Type: form.Type,
+  Median_PSF: Number(form.medianPsf),
+  Transactions: Number(form.transactions),
+})
     });
 
     const data = await response.json();

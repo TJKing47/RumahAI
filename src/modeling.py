@@ -229,32 +229,34 @@ def get_model_explanation(input_data: dict) -> List[Tuple[str, float]]:
     preprocessor = pipeline.named_steps["preprocessor"]
     transformed = preprocessor.transform(pd.DataFrame([input_data]))
 
-    # Feature names after preprocessing
     try:
         feature_names = preprocessor.get_feature_names_out().tolist()
     except Exception:
         return []
 
+    # Convert sparse / dense safely into a 1D numpy row
+    if hasattr(transformed, "toarray"):
+        row_values = transformed.toarray()[0]
+    else:
+        row_values = np.asarray(transformed).reshape(1, -1)[0]
+
     if hasattr(model, "feature_importances_"):
         importances = np.asarray(model.feature_importances_)
-        if transformed.ndim == 2:
-            row_values = np.asarray(transformed)[0]
-        else:
-            row_values = transformed
-
         contributions = []
+
         for name, val, imp in zip(feature_names, row_values, importances):
             contributions.append((name, float(abs(val) * imp)))
+
         contributions.sort(key=lambda x: x[1], reverse=True)
         return contributions[:8]
 
-    # For linear regression, approximate contribution with coefficient * feature value.
     if hasattr(model, "coef_"):
-        coefs = np.asarray(model.coef_)
-        row_values = np.asarray(transformed)[0]
+        coefs = np.asarray(model.coef_).ravel()
         contributions = []
+
         for name, val, coef in zip(feature_names, row_values, coefs):
             contributions.append((name, float(abs(val * coef))))
+
         contributions.sort(key=lambda x: x[1], reverse=True)
         return contributions[:8]
 

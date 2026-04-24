@@ -188,6 +188,249 @@ function StatCard({ icon: Icon, label, value, sub }) {
   );
 }
 
+function MarketLineChart({ data }) {
+  const [hovered, setHovered] = useState(null);
+
+  if (!data?.length) {
+    return <div className="placeholder-box">No state market data available.</div>;
+  }
+
+  const cleanData = data.filter(
+    (item) => String(item.State).toLowerCase() !== "putrajaya"
+  );
+
+  const width = Math.max(1200, cleanData.length * 96);
+  const height = 520;
+  const paddingLeft = 76;
+  const paddingRight = 76;
+  const paddingTop = 56;
+  const paddingBottom = 126;
+  const chartWidth = width - paddingLeft - paddingRight;
+  const chartTop = paddingTop;
+  const chartBottom = height - paddingBottom;
+  const chartHeight = chartBottom - chartTop;
+
+  const values = cleanData.flatMap((item) => [
+    Number(item.average_price || 0),
+    Number(item.median_price || 0),
+  ]);
+
+  const maxValue = Math.max(...values) * 1.08;
+  const minValue = Math.min(...values) * 0.82;
+
+  const xFor = (index) =>
+    paddingLeft + index * (chartWidth / Math.max(cleanData.length - 1, 1));
+
+  const yFor = (value) =>
+    chartBottom -
+    ((Number(value || 0) - minValue) / (maxValue - minValue || 1)) * chartHeight;
+
+  const avgPoints = cleanData
+    .map((item, index) => `${xFor(index)},${yFor(Number(item.average_price || 0))}`)
+    .join(" ");
+
+  const medianPoints = cleanData
+    .map((item, index) => `${xFor(index)},${yFor(Number(item.median_price || 0))}`)
+    .join(" ");
+
+  return (
+    <div className="custom-chart-shell line-chart-shell">
+      <div className="chart-scroll-wrap">
+        <svg className="custom-chart-svg line-chart-svg" viewBox={`0 0 ${width} ${height}`} role="img">
+          {[0, 1, 2, 3, 4].map((line) => {
+            const y = chartTop + line * (chartHeight / 4);
+            return (
+              <line
+                key={line}
+                x1={paddingLeft}
+                y1={y}
+                x2={width - paddingRight}
+                y2={y}
+                className="chart-grid-line"
+              />
+            );
+          })}
+
+          <polyline points={avgPoints} className="market-line average" />
+          <polyline points={medianPoints} className="market-line median" />
+
+          {cleanData.map((item, index) => {
+            const x = xFor(index);
+            const yAverage = yFor(Number(item.average_price || 0));
+            const yMedian = yFor(Number(item.median_price || 0));
+            const isHovered = hovered?.State === item.State;
+            const shortState =
+              item.State.length > 13 ? `${item.State.slice(0, 13)}...` : item.State;
+
+            return (
+              <g
+                key={item.State}
+                className="chart-point-group"
+                onMouseEnter={() => setHovered(item)}
+                onMouseLeave={() => setHovered(null)}
+              >
+                <line
+                  x1={x}
+                  x2={x}
+                  y1={chartTop}
+                  y2={chartBottom}
+                  className={isHovered ? "chart-hover-line active" : "chart-hover-line"}
+                />
+
+                <circle cx={x} cy={yAverage} r={isHovered ? 7 : 5.5} className="chart-dot average" />
+                <circle cx={x} cy={yMedian} r={isHovered ? 7 : 5.5} className="chart-dot median" />
+
+                <text
+                  x={x}
+                  y={chartBottom + 42}
+                  textAnchor="end"
+                  transform={`rotate(-35 ${x} ${chartBottom + 42})`}
+                  className="chart-axis-label state-axis-label"
+                >
+                  {shortState}
+                </text>
+
+                <title>
+                  {item.State}: Average {currency(item.average_price)}, Median {currency(item.median_price)}
+                </title>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+
+      <div className="chart-legend-row">
+        <span><i className="legend-dot average"></i> Average Price</span>
+        <span><i className="legend-dot median"></i> Median Price</span>
+      </div>
+
+      {hovered && (
+        <div className="chart-hover-card">
+          <strong>{hovered.State}</strong>
+          <span>Average: {currency(hovered.average_price)}</span>
+          <span>Median: {currency(hovered.median_price)}</span>
+          <span>PSF: RM {Math.round(hovered.average_psf || 0)}</span>
+          <span>Samples: {hovered.sample_count}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MarketAreaBarChart({ stateAverage, areaData }) {
+  const [hovered, setHovered] = useState(null);
+
+  if (!areaData?.length) {
+    return <div className="placeholder-box">No area data available for this state.</div>;
+  }
+
+  const width = 1100;
+  const height = 520;
+
+  // More dedicated space for title/average line, bars, and x-axis labels.
+  const paddingLeft = 70;
+  const paddingRight = 70;
+  const paddingTop = 58;
+  const paddingBottom = 118;
+  const chartWidth = width - paddingLeft - paddingRight;
+  const chartTop = paddingTop;
+  const chartBottom = height - paddingBottom;
+  const chartHeight = chartBottom - chartTop;
+
+  const maxValue =
+    Math.max(stateAverage || 0, ...areaData.map((item) => Number(item.average_price || 0))) * 1.18;
+
+  const barGap = 18;
+  const barWidth = Math.max(
+    34,
+    (chartWidth - barGap * (areaData.length - 1)) / areaData.length
+  );
+
+  const yFor = (value) => chartBottom - (Number(value || 0) / maxValue) * chartHeight;
+  const avgY = yFor(stateAverage);
+
+  return (
+    <div className="custom-chart-shell area-chart-shell">
+      <div className="area-average-summary-card">
+        <span>State Average Benchmark</span>
+        <strong>{currency(stateAverage)}</strong>
+      </div>
+      <svg className="custom-chart-svg area-chart-svg" viewBox={`0 0 ${width} ${height}`} role="img">
+        {[0, 1, 2, 3, 4].map((line) => {
+          const y = chartTop + line * (chartHeight / 4);
+          return (
+            <line
+              key={line}
+              x1={paddingLeft}
+              y1={y}
+              x2={width - paddingRight}
+              y2={y}
+              className="chart-grid-line"
+            />
+          );
+        })}
+
+        {areaData.map((item, index) => {
+          const value = Number(item.average_price || 0);
+          const x = paddingLeft + index * (barWidth + barGap);
+          const barHeight = (value / maxValue) * chartHeight;
+          const y = chartBottom - barHeight;
+          const isHovered = hovered?.Area === item.Area;
+          const label =
+            item.Area.length > 11 ? `${item.Area.slice(0, 11)}...` : item.Area;
+
+          return (
+            <g
+              key={item.Area}
+              className="chart-point-group"
+              onMouseEnter={() => setHovered(item)}
+              onMouseLeave={() => setHovered(null)}
+            >
+              <rect
+                x={x}
+                y={y}
+                width={barWidth}
+                height={barHeight}
+                rx="12"
+                className={isHovered ? "area-bar active" : "area-bar"}
+              />
+
+              <title>
+                {item.Area}: {currency(value)}
+              </title>
+
+              <text
+                x={x + barWidth / 2}
+                y={chartBottom + 42}
+                textAnchor="end"
+                transform={`rotate(-32 ${x + barWidth / 2} ${chartBottom + 42})`}
+                className="chart-axis-label area-label"
+              >
+                {label}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+
+      <div className="chart-legend-row area-chart-legend">
+        <span><i className="legend-dot average"></i> Area Average Price</span>
+        <span><i className="legend-line"></i> State Average</span>
+      </div>
+
+      {hovered && (
+        <div className="chart-hover-card">
+          <strong>{hovered.Area}</strong>
+          <span>Average: {currency(hovered.average_price)}</span>
+          <span>Median: {currency(hovered.median_price)}</span>
+          <span>PSF: RM {Math.round(hovered.average_psf || 0)}</span>
+          <span>Samples: {hovered.sample_count}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [darkMode, setDarkMode] = useState(() => {
@@ -204,6 +447,12 @@ export default function App() {
   });
 
   const [result, setResult] = useState(null);
+  const [benchmark, setBenchmark] = useState(null);
+  const [benchmarkLoading, setBenchmarkLoading] = useState(false);
+  const [marketStatesData, setMarketStatesData] = useState([]);
+  const [marketAreasData, setMarketAreasData] = useState([]);
+  const [marketTrendLoading, setMarketTrendLoading] = useState(false);
+  const [selectedTrendState, setSelectedTrendState] = useState("Selangor");
 
   useEffect(() => {
     localStorage.setItem("rumahai-dark-mode", String(darkMode));
@@ -222,6 +471,169 @@ export default function App() {
     }
     return errors;
   }, [form]);
+
+  const priceDiffPct = useMemo(() => {
+    if (!benchmark?.median_price || !(result?.adjustedPrice || result?.predictedPrice)) return null;
+    const anchorPrice = result?.adjustedPrice || result?.predictedPrice;
+    return ((anchorPrice - benchmark.median_price) / benchmark.median_price) * 100;
+  }, [benchmark, result]);
+
+  const benchmarkVerdict = useMemo(() => {
+    if (priceDiffPct === null) return null;
+    if (priceDiffPct > 10) return "Above market benchmark";
+    if (priceDiffPct < -10) return "Below market benchmark";
+    return "Near market benchmark";
+  }, [priceDiffPct]);
+
+  const benchmarkDifference = useMemo(() => {
+    if (!benchmark?.median_price || !(result?.adjustedPrice || result?.predictedPrice)) return null;
+    const anchorPrice = result?.adjustedPrice || result?.predictedPrice;
+    return anchorPrice - benchmark.median_price;
+  }, [benchmark, result]);
+
+  const fetchMarketBenchmark = async () => {
+    setBenchmarkLoading(true);
+
+    try {
+      const response = await fetch("http://127.0.0.1:5000/market-benchmark", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          State: form.State,
+          Type: form.Type,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error(data.error || "Benchmark fetch failed");
+        setBenchmark(null);
+        return;
+      }
+
+      setBenchmark(data);
+    } catch (error) {
+      console.error("Could not fetch market benchmark", error);
+      setBenchmark(null);
+    } finally {
+      setBenchmarkLoading(false);
+    }
+  };
+
+
+  const fetchMarketTrendStates = async () => {
+    setMarketTrendLoading(true);
+
+    try {
+      const response = await fetch("http://127.0.0.1:5000/market-trends/states");
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload?.error || "State market trend fetch failed");
+      }
+
+      const rows = Array.isArray(payload)
+        ? payload
+        : payload.data || payload.states || payload.state_summary || [];
+
+      const cleanedRows = rows
+        .map((item) => ({
+          State: item.State ?? item.state ?? item.label ?? item.name,
+          average_price: Number(
+            item.average_price ??
+              item.averagePrice ??
+              item.avg ??
+              item.mean_price ??
+              item.median_price ??
+              0
+          ),
+          median_price: Number(
+            item.median_price ??
+              item.medianPrice ??
+              item.median ??
+              item.average_price ??
+              item.avg ??
+              0
+          ),
+          average_psf: Number(item.average_psf ?? item.averagePsf ?? item.median_psf ?? 0),
+          transactions: Number(item.transactions ?? item.Transactions ?? 0),
+          sample_count: Number(item.sample_count ?? item.sampleCount ?? item.count ?? 0),
+        }))
+        .filter((item) => item.State && item.average_price > 0)
+        .filter((item) => String(item.State).toLowerCase() !== "putrajaya");
+
+      setMarketStatesData(cleanedRows);
+
+      if (cleanedRows.length && !cleanedRows.some((item) => item.State === selectedTrendState)) {
+        setSelectedTrendState(cleanedRows[0].State);
+      }
+    } catch (error) {
+      console.error("Could not fetch state market trends", error);
+      setMarketStatesData([]);
+    } finally {
+      setMarketTrendLoading(false);
+    }
+  };
+
+  const fetchMarketTrendAreas = async (stateName) => {
+    if (!stateName) return;
+
+    setMarketTrendLoading(true);
+
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:5000/market-trends/areas/${encodeURIComponent(stateName)}`
+      );
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload?.error || "Area market trend fetch failed");
+      }
+
+      const rows = Array.isArray(payload)
+        ? payload
+        : payload.data || payload.areas || payload.area_summary || [];
+
+      const cleanedRows = rows
+        .map((item) => ({
+          Area: item.Area ?? item.area ?? item.label ?? item.name,
+          average_price: Number(
+            item.average_price ??
+              item.averagePrice ??
+              item.avg ??
+              item.mean_price ??
+              item.median_price ??
+              0
+          ),
+          median_price: Number(
+            item.median_price ??
+              item.medianPrice ??
+              item.median ??
+              item.average_price ??
+              item.avg ??
+              0
+          ),
+          average_psf: Number(item.average_psf ?? item.averagePsf ?? item.median_psf ?? 0),
+          transactions: Number(item.transactions ?? item.Transactions ?? 0),
+          sample_count: Number(item.sample_count ?? item.sampleCount ?? item.count ?? 0),
+        }))
+        .filter((item) => item.Area && item.average_price > 0);
+
+      setMarketAreasData(cleanedRows);
+    } catch (error) {
+      console.error("Could not fetch area market trends", error);
+      setMarketAreasData([]);
+    } finally {
+      setMarketTrendLoading(false);
+    }
+  };
+
+  const selectedStateSummary =
+    marketStatesData.find((item) => item.State === selectedTrendState) || null;
+
 
   const estimatePrice = async () => {
     if (validation.length) return;
@@ -251,40 +663,65 @@ export default function App() {
       }
 
       const predicted = Number(data.predicted_price);
+      const adjusted = Number(data.adjusted_price || data.predicted_price);
+      const growthRate =
+        form.State === "Kuala Lumpur"
+          ? 0.055
+          : form.State === "Selangor"
+          ? 0.048
+          : form.State === "Penang"
+          ? 0.045
+          : 0.038;
 
       setResult({
         predictedPrice: Math.round(predicted),
-        estimatedRangeLow: Math.round(predicted * 0.93),
-        estimatedRangeHigh: Math.round(predicted * 1.07),
-        pricePerSqft: Math.round(predicted / Number(form.sqft)),
+        adjustedPrice: Math.round(adjusted),
+        estimatedRangeLow: Math.round(adjusted * 0.93),
+        estimatedRangeHigh: Math.round(adjusted * 1.07),
+        pricePerSqft: Math.round(adjusted / Number(form.sqft)),
         confidence:
           form.transactions >= 15
             ? "Higher confidence"
             : form.transactions >= 8
             ? "Moderate confidence"
             : "Lower confidence",
-        pricingLabel: "AI Estimated Value",
-        stateAverage: predicted * 0.95,
-        comparisonPct: 5.0,
+        pricingLabel: data.market_median ? "Market-adjusted AI value" : "AI Estimated Value",
+        stateAverage: data.market_median ? Number(data.market_median) : adjusted * 0.95,
+        comparisonPct:
+          data.market_median && Number(data.market_median) > 0
+            ? ((adjusted - Number(data.market_median)) / Number(data.market_median)) * 100
+            : 5.0,
         futureTrend: [1, 2, 3, 4, 5].map((year) => ({
           year: `${year}Y`,
-          value: Math.round(predicted * Math.pow(1.045, year)),
+          value: Math.round(adjusted * Math.pow(1 + growthRate, year)),
         })),
-        contributions: (data.explanation || [])
-          .filter((item) => Number(item.importance) > 0)
-          .map((item, index) => ({
-            label: formatFeatureLabel(item.feature),
-            value: Number(item.importance),
-            width: Math.max(8, 100 - index * 10),
-          })),
       });
 
+      fetchMarketBenchmark();
       setActiveTab("predict");
     } catch (error) {
       alert("Could not connect to Flask backend.");
       console.error(error);
     }
   };
+
+  useEffect(() => {
+    if (activeTab === "trends" && !benchmark && !benchmarkLoading) {
+      fetchMarketBenchmark();
+    }
+  }, [activeTab, benchmark, benchmarkLoading]);
+
+  useEffect(() => {
+    if (activeTab === "trends" && marketStatesData.length === 0) {
+      fetchMarketTrendStates();
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === "trends") {
+      fetchMarketTrendAreas(selectedTrendState);
+    }
+  }, [activeTab, selectedTrendState]);
 
   const resetForm = () => {
     setForm({
@@ -296,6 +733,7 @@ export default function App() {
       transactions: 20,
     });
     setResult(null);
+    setBenchmark(null);
   };
 
   return (
@@ -483,180 +921,372 @@ export default function App() {
                 <div className="section-head">
                   <div>
                     <h2>Estimate Property Value</h2>
-                    <p>Enter your property details to get an estimated market value and price outlook.</p>
+                    <p>
+                      Use the guided inputs below to get an AI estimate, then compare it
+                      against the live market benchmark and current comparable listings.
+                    </p>
                   </div>
                   <button className="secondary-btn" onClick={resetForm}>
                     <RefreshCcw size={16} /> Reset
                   </button>
                 </div>
 
-                <div className="two-grid">
-                  <div className="card">
-                    <h3>Property Details</h3>
+                <div className="predict-page-stack">
+                  <div className="predict-page-center">
+                    <div className="predict-centered-card card">
+                      <div className="predict-headline">
+                        <span className="hero-kicker">Smart Property Check</span>
+                        <h3>Tell RumahAI about the property</h3>
+                        <p className="muted">
+                          We turned the technical inputs into friendlier controls so normal
+                          users can explore property value more easily.
+                        </p>
+                      </div>
 
-                    <label>State</label>
-                    <select
-                      value={form.State}
-                      onChange={(e) => setForm({ ...form, State: e.target.value })}
-                    >
-                      {states.map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
-                    </select>
-
-                    <div className="form-grid">
-                      <div>
-                        <label>Property Type</label>
-                        <select
-                          value={form.Type}
-                          onChange={(e) => setForm({ ...form, Type: e.target.value })}
-                        >
-                          {propertyTypes.map((t) => (
-                            <option key={t} value={t}>
-                              {t}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label>Tenure</label>
-                        <select
-                          value={form.Tenure}
-                          onChange={(e) => setForm({ ...form, Tenure: e.target.value })}
-                        >
-                          {tenures.map((t) => (
-                            <option key={t} value={t}>
-                              {t}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-
-                    <div className="form-grid-3">
-                      <div>
-                        <label>Built-up Size (sqft)</label>
-                        <input
-                          type="number"
-                          value={form.sqft}
-                          onChange={(e) => setForm({ ...form, sqft: Number(e.target.value) })}
-                        />
-                      </div>
-                      <div>
-                        <label>Median PSF (RM)</label>
-                        <input
-                          type="number"
-                          value={form.medianPsf}
-                          onChange={(e) => setForm({ ...form, medianPsf: Number(e.target.value) })}
-                        />
-                      </div>
-                      <div>
-                        <label>Transactions</label>
-                        <input
-                          type="number"
-                          value={form.transactions}
-                          onChange={(e) =>
-                            setForm({ ...form, transactions: Number(e.target.value) })
-                          }
-                        />
-                      </div>
-                    </div>
-
-                    {validation.length > 0 && (
-                      <div className="error-box">
-                        {validation.map((err) => (
-                          <div key={err}>• {err}</div>
+                      <div className="predict-pill-row">
+                        {propertyTypes.map((type) => (
+                          <motion.button
+                            key={type}
+                            type="button"
+                            whileHover={{ y: -2 }}
+                            whileTap={{ scale: 0.98 }}
+                            className={`choice-pill ${form.Type === type ? "active" : ""}`}
+                            onClick={() => setForm({ ...form, Type: type })}
+                          >
+                            {type}
+                          </motion.button>
                         ))}
                       </div>
-                    )}
 
-                    <div className="btn-row">
-                      <button className="primary-btn" onClick={estimatePrice}>
-                        Get Estimate
-                      </button>
-                      <button className="secondary-btn" onClick={resetForm}>
-                        Clear Form
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="stack">
-                    <div className="card">
-                      <h3>Estimated Market Value</h3>
-                      {result ? (
-                        <>
-                          <div className="result-box">
-                            <div className="muted-light">Estimated property value</div>
-                            <div className="result-price">{currency(result.predictedPrice)}</div>
-                            <div className="muted-light">
-                              Likely range: {currency(result.estimatedRangeLow)} —{" "}
-                              {currency(result.estimatedRangeHigh)}
-                            </div>
-                          </div>
-
-                          <div className="result-grid">
-                            <div className="mini-box">
-                              <div className="small-muted">Price per sqft</div>
-                              <strong>RM {result.pricePerSqft}</strong>
-                            </div>
-                            <div className="mini-box">
-                              <div className="small-muted">Estimate confidence</div>
-                              <strong>{result.confidence}</strong>
-                            </div>
-                            <div className="mini-box">
-                              <div className="small-muted">Market position</div>
-                              <strong>{result.pricingLabel}</strong>
-                            </div>
-                          </div>
-
-                          <div className="insight-strip">
-                            <MapPin size={16} />
-                            <span>
-                              Compared with the average in {form.State}, this estimate is{" "}
-                              <strong>
-                                {result.comparisonPct >= 0
-                                  ? `${result.comparisonPct.toFixed(1)}% higher`
-                                  : `${Math.abs(result.comparisonPct).toFixed(1)}% lower`}
-                              </strong>.
-                            </span>
-                          </div>
-                        </>
-                      ) : (
-                        <div className="placeholder-box">
-                          Fill in your property details to get an estimated market value.
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="card">
-                      <h3>Top factors affecting this estimate</h3>
-                      {result ? (
-                        <div className="chart-list">
-                          {result.contributions
-                            .filter((item) => item.value > 0)
-                            .slice(0, 5)
-                            .map((item) => (
-                              <div key={item.label} className="chart-item">
-                                <div className="chart-row">
-                                  <span>{item.label}</span>
-                                  <strong>+{currency(Math.abs(item.value))}</strong>
-                                </div>
-                                <div className="chart-track">
-                                  <motion.div
-                                    initial={{ width: 0 }}
-                                    animate={{ width: `${item.width}%` }}
-                                    transition={{ duration: 0.7 }}
-                                    className="chart-fill"
-                                  />
-                                </div>
-                              </div>
+                      <div className="predict-grid-friendly">
+                        <div className="friendly-field">
+                          <label>State</label>
+                          <select
+                            value={form.State}
+                            onChange={(e) => setForm({ ...form, State: e.target.value })}
+                          >
+                            {states.map((s) => (
+                              <option key={s} value={s}>
+                                {s}
+                              </option>
                             ))}
+                          </select>
+                        </div>
+
+                        <div className="friendly-field">
+                          <label>Ownership Type</label>
+                          <div className="toggle-row">
+                            {tenures.map((t) => (
+                              <motion.button
+                                key={t}
+                                type="button"
+                                whileHover={{ y: -2 }}
+                                whileTap={{ scale: 0.98 }}
+                                className={`toggle-pill ${form.Tenure === t ? "active" : ""}`}
+                                onClick={() => setForm({ ...form, Tenure: t })}
+                              >
+                                {t}
+                              </motion.button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="predict-slider-grid">
+                        <div className="slider-card">
+                          <div className="slider-top">
+                            <label>Property Size</label>
+                            <div className="slider-value-input">
+                              <input
+                                type="number"
+                                min="500"
+                                max="5000"
+                                step="50"
+                                value={form.sqft}
+                                onChange={(e) =>
+                                  setForm({ ...form, sqft: Number(e.target.value) })
+                                }
+                              />
+                              <strong>sq ft</strong>
+                            </div>
+                          </div>
+                          <input
+                            type="range"
+                            min="500"
+                            max="5000"
+                            step="50"
+                            value={form.sqft}
+                            onChange={(e) =>
+                              setForm({ ...form, sqft: Number(e.target.value) })
+                            }
+                          />
+                          <div className="slider-scale">
+                            <span>Compact</span>
+                            <span>Spacious</span>
+                          </div>
+                          <p className="small-muted">
+                            The overall built-up size of the home.
+                          </p>
+                        </div>
+
+                        <div className="slider-card">
+  <div className="slider-top">
+    <label>Area Price Level</label>
+    <div className="slider-input-inline">
+      <span className="inline-unit">RM</span>
+      <input
+        type="number"
+        min="50"
+        max="1200"
+        step="10"
+        value={form.medianPsf}
+        onChange={(e) =>
+          setForm({ ...form, medianPsf: Number(e.target.value) || 0 })
+        }
+        className="inline-number-input"
+      />
+      <span className="inline-unit">/ sq ft</span>
+    </div>
+  </div>
+  <input
+    type="range"
+    min="50"
+    max="1200"
+    step="10"
+    value={form.medianPsf}
+    onChange={(e) =>
+      setForm({ ...form, medianPsf: Number(e.target.value) })
+    }
+  />
+  <div className="slider-scale">
+    <span>Budget area</span>
+    <span>Premium area</span>
+  </div>
+  <p className="small-muted">
+    A friendlier version of median PSF — the typical price level in that area.
+  </p>
+</div>
+
+<div className="slider-card">
+  <div className="slider-top">
+    <label>Recent Sales Activity</label>
+    <div className="slider-input-inline">
+      <input
+        type="number"
+        min="1"
+        max="50"
+        step="1"
+        value={form.transactions}
+        onChange={(e) =>
+          setForm({ ...form, transactions: Number(e.target.value) || 0 })
+        }
+        className="inline-number-input"
+      />
+      <span className="inline-unit">sales</span>
+    </div>
+  </div>
+  <input
+    type="range"
+    min="1"
+    max="50"
+    step="1"
+    value={form.transactions}
+    onChange={(e) =>
+      setForm({ ...form, transactions: Number(e.target.value) })
+    }
+  />
+  <div className="slider-scale">
+    <span>Quiet market</span>
+    <span>Active market</span>
+  </div>
+  <p className="small-muted">
+    A simplified way to show how active recent sales have been nearby.
+  </p>
+</div>
+</div>
+
+{validation.length > 0 && (
+  <div className="error-box">
+    {validation.map((err) => (
+      <div key={err}>• {err}</div>
+    ))}
+  </div>
+)}
+
+<div className="predict-action-row">
+  <motion.button
+    whileHover={{ scale: 1.03 }}
+    whileTap={{ scale: 0.97 }}
+    className="primary-btn big-action-btn"
+    onClick={estimatePrice}
+  >
+    Get My Estimate
+  </motion.button>
+
+  <motion.button
+    whileHover={{ scale: 1.03 }}
+    whileTap={{ scale: 0.97 }}
+    className="secondary-btn"
+    onClick={resetForm}
+  >
+    Clear Form
+  </motion.button>
+</div>
+</div>
+</div>
+
+                  <div className="predict-results-grid">
+                    <div className="stack">
+                      <div className="card">
+                        <h3>Estimated Market Value</h3>
+                        {result ? (
+                          <>
+                            <div className="result-box">
+                              <div className="muted-light">Recommended property value</div>
+                              <div className="result-price">
+                                {currency(result.adjustedPrice || result.predictedPrice)}
+                              </div>
+                              <div className="muted-light">
+                                AI base estimate: {currency(result.predictedPrice)}
+                              </div>
+                              <div className="muted-light">
+                                Likely range: {currency(result.estimatedRangeLow)} —{" "}
+                                {currency(result.estimatedRangeHigh)}
+                              </div>
+                            </div>
+
+                            <div className="result-grid">
+                              <div className="mini-box">
+                                <div className="small-muted">Price per sq ft</div>
+                                <strong>RM {result.pricePerSqft}</strong>
+                              </div>
+                              <div className="mini-box">
+                                <div className="small-muted">Estimate confidence</div>
+                                <strong>{result.confidence}</strong>
+                              </div>
+                              <div className="mini-box">
+                                <div className="small-muted">Market position</div>
+                                <strong>{benchmarkVerdict || result.pricingLabel}</strong>
+                              </div>
+                            </div>
+
+                            {benchmarkDifference !== null && (
+                              <div className="insight-strip">
+                                <MapPin size={16} />
+                                <span>
+                                  Compared with the live benchmark, this estimate is{" "}
+                                  <strong>
+                                    {priceDiffPct >= 0
+                                      ? `${priceDiffPct.toFixed(1)}% above`
+                                      : `${Math.abs(priceDiffPct).toFixed(1)}% below`}
+                                  </strong>.
+                                </span>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <div className="placeholder-box">
+                            Your property estimate will appear here after you submit the form.
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="card">
+                        <h3>Live Market Benchmark</h3>
+                        {benchmarkLoading ? (
+                          <div className="placeholder-box">Fetching live market benchmark...</div>
+                        ) : benchmark ? (
+                          <>
+                            <div className="result-grid">
+                              <div className="mini-box">
+                                <div className="small-muted">Source</div>
+                                <strong>{benchmark.source}</strong>
+                              </div>
+                              <div className="mini-box">
+                                <div className="small-muted">Median asking price</div>
+                                <strong>{currency(benchmark.median_price)}</strong>
+                              </div>
+                              <div className="mini-box">
+                                <div className="small-muted">Median area price</div>
+                                <strong>
+                                  {benchmark.median_psf
+                                    ? `RM ${Math.round(benchmark.median_psf)} / sq ft`
+                                    : "N/A"}
+                                </strong>
+                              </div>
+                            </div>
+
+                            <div className="result-grid" style={{ marginTop: "16px" }}>
+                              <div className="mini-box">
+                                <div className="small-muted">Listings found</div>
+                                <strong>{benchmark.listing_count}</strong>
+                              </div>
+                              <div className="mini-box">
+                                <div className="small-muted">Lowest asking price</div>
+                                <strong>{currency(benchmark.min_price)}</strong>
+                              </div>
+                              <div className="mini-box">
+                                <div className="small-muted">Highest asking price</div>
+                                <strong>{currency(benchmark.max_price)}</strong>
+                              </div>
+                            </div>
+
+                            {result && benchmarkDifference !== null && (
+                              <div className="insight-strip">
+                                <TrendingUp size={16} />
+                                <span>
+                                  RumahAI estimate is{" "}
+                                  <strong>
+                                    {priceDiffPct >= 0
+                                      ? `${priceDiffPct.toFixed(1)}% above`
+                                      : `${Math.abs(priceDiffPct).toFixed(1)}% below`}
+                                  </strong>{" "}
+                                  the live Mudah median. <strong>{benchmarkVerdict}</strong>
+                                </span>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <div className="placeholder-box">
+                            Live benchmark will appear after prediction.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="card">
+                      <h3>Market Trend & Comparable Listings</h3>
+                      {benchmarkLoading ? (
+                        <div className="placeholder-box">Loading market trend and comparable listings...</div>
+                      ) : benchmark?.listings?.length ? (
+                        <div className="chart-list">
+                          {benchmark.listings.slice(0, 5).map((item, index) => (
+                            <div key={`${item.url || item.title}-${index}`} className="mini-box">
+                              <strong>{item.title || item.location || "Comparable Listing"}</strong>
+                              <span className="small-muted">
+                                {item.location || "Location unavailable"}
+                              </span>
+                              <span className="small-muted">
+                                {currency(item.price)}
+                                {item.sqft ? ` • ${Math.round(item.sqft)} sq ft` : ""}
+                                {item.tenure ? ` • ${item.tenure}` : ""}
+                              </span>
+                              {item.url && (
+                                <a
+                                  href={item.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  style={{ marginTop: "8px", fontWeight: 700 }}
+                                >
+                                  Open listing
+                                </a>
+                              )}
+                            </div>
+                          ))}
                         </div>
                       ) : (
                         <div className="placeholder-box">
-                          A simple explanation of the price will appear here after prediction.
+                          Market trend and comparable listings will appear below the estimate after prediction.
                         </div>
                       )}
                     </div>
@@ -674,58 +1304,91 @@ export default function App() {
                 <div className="section-head">
                   <div>
                     <h2>Market Trends & Future Outlook</h2>
-                    <p>Simple graphs and trend visuals that are easier for normal users to understand.</p>
+                    <p>
+                      Dataset-driven graphs from your local Malaysia housing price data.
+                    </p>
                   </div>
+                  <button className="secondary-btn" onClick={fetchMarketTrendStates}>
+                    <RefreshCcw size={16} /> Refresh Graphs
+                  </button>
                 </div>
 
-                <div className="stats-grid">
-                  <StatCard
-                    icon={TrendingUp}
-                    label="Expected 5-Year Outlook"
-                    value="Positive Growth"
-                    sub="Based on current estimate scenario"
-                  />
-                  <StatCard
-                    icon={CircleDollarSign}
-                    label="Current State Average"
-                    value={currency(result?.stateAverage || 690000)}
-                    sub="Comparison baseline"
-                  />
-                  <StatCard
-                    icon={MapPin}
-                    label="Selected State"
-                    value={form.State}
-                    sub="Used in estimate and outlook"
-                  />
-                  <StatCard
-                    icon={Brain}
-                    label="Forecast Mode"
-                    value="Scenario Based"
-                    sub="Conservative long-term projection"
-                  />
-                </div>
+                <div className="stack">
+                  <div className="card trends-chart-card">
+                    <div className="trends-card-head">
+                      <div>
+                        <h3>Overall Housing Price Estimation by State</h3>
+                        <p className="muted">
+                          This line graph uses the dataset average and median prices for all
+                          available Malaysian states. Hover on each point to view exact values.
+                        </p>
+                      </div>
+                    </div>
 
-                <div className="two-grid">
-                  <div className="card">
-                    <h3>5-Year Future Value Projection</h3>
-                    <p className="muted">A simple showcase of how this property value may grow over time.</p>
-                    <TrendChart
-                      data={
-                        result?.futureTrend || [
-                          { year: "1Y", value: 520000 },
-                          { year: "2Y", value: 545000 },
-                          { year: "3Y", value: 570000 },
-                          { year: "4Y", value: 598000 },
-                          { year: "5Y", value: 628000 },
-                        ]
-                      }
-                    />
+                    {marketTrendLoading && marketStatesData.length === 0 ? (
+                      <div className="placeholder-box">Loading state graph data...</div>
+                    ) : (
+                      <MarketLineChart data={marketStatesData} />
+                    )}
                   </div>
 
-                  <div className="card">
-                    <h3>State Price Comparison</h3>
-                    <p className="muted">Average estimated house values across selected states.</p>
-                    <MiniBarChart data={stateChart} />
+                  <div className="card trends-chart-card">
+                    <div className="trends-card-head trends-filter-head">
+                      <div>
+                        <h3>State & Area Housing Price Comparison</h3>
+                        <p className="muted">
+                          Select a state to view area-level estimated prices and compare them
+                          against the state average.
+                        </p>
+                      </div>
+
+                      <div className="trends-filter-row">
+                        <div className="friendly-field trends-filter-box">
+                          <label>Choose State</label>
+                          <select
+                            value={selectedTrendState}
+                            onChange={(e) => setSelectedTrendState(e.target.value)}
+                          >
+                            {(marketStatesData.length
+                              ? marketStatesData.map((item) => item.State)
+                              : states
+                            ).map((state) => (
+                              <option key={state} value={state}>
+                                {state}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="result-grid" style={{ marginBottom: "18px" }}>
+                      <div className="mini-box">
+                        <div className="small-muted">Selected State</div>
+                        <strong>{selectedTrendState}</strong>
+                      </div>
+                      <div className="mini-box">
+                        <div className="small-muted">State Average</div>
+                        <strong>
+                          {selectedStateSummary
+                            ? currency(selectedStateSummary.average_price)
+                            : "Loading..."}
+                        </strong>
+                      </div>
+                      <div className="mini-box">
+                        <div className="small-muted">Dataset Samples</div>
+                        <strong>{selectedStateSummary?.sample_count || 0}</strong>
+                      </div>
+                    </div>
+
+                    {marketTrendLoading && marketAreasData.length === 0 ? (
+                      <div className="placeholder-box">Loading area graph data...</div>
+                    ) : (
+                      <MarketAreaBarChart
+                        stateAverage={selectedStateSummary?.average_price || 0}
+                        areaData={marketAreasData}
+                      />
+                    )}
                   </div>
                 </div>
               </motion.div>

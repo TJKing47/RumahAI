@@ -513,6 +513,9 @@ export default function App() {
 
   const [savedSearches, setSavedSearches] = useState([]);
 
+  const [preferences, setPreferences] = useState(null);
+  const [preferencesLoading, setPreferencesLoading] = useState(false);
+
   const [adminUsers, setAdminUsers] = useState([]);
 
   const [adminLogs, setAdminLogs] = useState([]);
@@ -968,6 +971,7 @@ const handleAuth = async () => {
     }
     setAuthToken(data.token);
     setCurrentUser(data.user);
+    loadPreferences();
     localStorage.setItem("rumahai-token", data.token);
     localStorage.setItem("rumahai-user", JSON.stringify(data.user));
   } catch {
@@ -996,6 +1000,83 @@ const saveCurrentSearch = async () => {
   });
   const data = await response.json();
   alert(data.message || "Saved.");
+};
+
+const loadPreferences = async () => {
+  if (!authToken) return;
+
+  try {
+    setPreferencesLoading(true);
+
+    const response = await fetch(
+      "http://127.0.0.1:5000/user/preferences",
+      {
+        headers: authHeaders(),
+      }
+    );
+
+    const data = await response.json();
+
+    setPreferences(data.preferences || null);
+  } catch (error) {
+    console.error(error);
+  } finally {
+    setPreferencesLoading(false);
+  }
+};
+
+const savePreferences = async () => {
+  if (!currentUser) {
+    alert("Please login first.");
+    return;
+  }
+
+  const response = await fetch(
+    "http://127.0.0.1:5000/user/preferences",
+    {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({
+        filters: finderForm,
+      }),
+    }
+  );
+
+  const data = await response.json();
+
+  alert(data.message || "Preferences saved");
+
+  loadPreferences();
+};
+
+const deletePreferences = async () => {
+  if (!window.confirm("Delete saved preferences?"))
+    return;
+
+  const response = await fetch(
+    "http://127.0.0.1:5000/user/preferences",
+    {
+      method: "DELETE",
+      headers: authHeaders(),
+    }
+  );
+
+  const data = await response.json();
+
+  alert(data.message || "Deleted");
+
+  setPreferences(null);
+};
+
+const applyPreferences = () => {
+  if (!preferences?.filters) {
+    alert("No preferences saved");
+    return;
+  }
+
+  setFinderForm(preferences.filters);
+
+  setActiveTab("about");
 };
 
 const loadSavedSearches = async () => {
@@ -2188,6 +2269,20 @@ const loadAdminData = async () => {
               Save Current House Search
             </button>
 
+          <button
+  className="secondary-btn"
+  onClick={savePreferences}
+>
+  Save Preferences
+</button>
+
+<button
+  className="secondary-btn"
+  onClick={loadPreferences}
+>
+  Load Preferences
+</button>
+
             <button className="secondary-btn" onClick={loadSavedSearches}>
               Load Saved Searches
             </button>
@@ -2197,6 +2292,39 @@ const loadAdminData = async () => {
             </button>
           </div>
         </div>
+
+        <div className="card">
+  <h3>My Preferences</h3>
+
+  {preferencesLoading ? (
+    <div className="placeholder-box">Loading preferences...</div>
+  ) : preferences && preferences.filters ? (
+    <div className="mini-box">
+      <strong>{preferences.filters.state || "Any State"}</strong>
+
+      <span className="small-muted">
+        Property: {preferences.filters.property_type || "Any"}
+      </span>
+
+      <span className="small-muted">
+        Price: RM {preferences.filters.min_price || "Any"} - RM{" "}
+        {preferences.filters.max_price || "Any"}
+      </span>
+
+      <div className="predict-action-row">
+        <button className="primary-btn" onClick={applyPreferences}>
+          Apply To House Finder
+        </button>
+
+        <button className="secondary-btn" onClick={deletePreferences}>
+          Delete
+        </button>
+      </div>
+    </div>
+  ) : (
+    <div className="placeholder-box">No saved preferences yet.</div>
+  )}
+</div>
 
         <div className="card">
           <h3>{currentUser.role === "admin" ? "Admin Tools" : "Saved Searches"}</h3>

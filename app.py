@@ -319,6 +319,72 @@ def search_houses():
         return jsonify({
             "error": f"House search failed: {str(e)}"
         }), 500
+    
+@app.route("/market-trends/yearly/<state>", methods=["GET"])
+def market_trends_yearly(state):
+    try:
+        states_data = get_state_market_summary()
+
+        selected = None
+        for item in states_data:
+            item_state = str(item.get("State") or item.get("state") or "").lower()
+            if item_state == state.lower():
+                selected = item
+                break
+
+        if not selected:
+            return jsonify({"error": "State not found"}), 404
+
+        baseline_price = float(
+            selected.get("average_price")
+            or selected.get("avg_price")
+            or selected.get("median_price")
+            or 0
+        )
+
+        sample_count = int(
+            selected.get("sample_count")
+            or selected.get("count")
+            or selected.get("samples")
+            or 0
+        )
+
+        if baseline_price <= 0:
+            return jsonify({"error": "Invalid baseline price"}), 400
+
+        state_lower = state.lower()
+
+        if state_lower in ["kuala lumpur", "selangor"]:
+            yearly_growth = 0.045
+        elif state_lower in ["penang", "johor"]:
+            yearly_growth = 0.038
+        else:
+            yearly_growth = 0.03
+
+        baseline_year = 2025
+        yearly_data = []
+
+        for i in range(0, 6):
+            year = baseline_year + i
+            predicted_price = baseline_price * ((1 + yearly_growth) ** i)
+
+            yearly_data.append({
+                "year": year,
+                "predicted_price": round(predicted_price),
+                "growth_rate": round(yearly_growth * 100, 2),
+                "sample_count": sample_count,
+            })
+
+        return jsonify({
+            "state": state,
+            "baseline_year": baseline_year,
+            "baseline_price": round(baseline_price),
+            "growth_rate": round(yearly_growth * 100, 2),
+            "data": yearly_data,
+        })
+
+    except Exception as e:
+        return jsonify({"error": f"Yearly market trend failed: {str(e)}"}), 500
 
 if __name__ == "__main__":
     app.run(debug=True, host="127.0.0.1", port=5000)

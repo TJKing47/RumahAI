@@ -457,6 +457,36 @@ function MarketAreaBarChart({ stateAverage, areaData }) {
   );
 }
 
+function YearlyPredictionChart({ data }) {
+  if (!data?.length) {
+    return <div className="placeholder-box">No yearly prediction data available.</div>;
+  }
+
+  const max = Math.max(...data.map((d) => d.predicted_price));
+
+  return (
+    <div className="yearly-forecast-chart">
+      {data.map((item) => (
+        <div key={item.year} className="yearly-forecast-item">
+          <div className="yearly-bar-wrap">
+            <motion.div
+              className="yearly-bar"
+              initial={{ height: 0 }}
+              animate={{
+                height: `${(item.predicted_price / max) * 150}px`,
+              }}
+              transition={{ duration: 0.7 }}
+            />
+          </div>
+
+          <strong>{item.year}</strong>
+          <span>{currency(item.predicted_price)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [darkMode, setDarkMode] = useState(() => {
@@ -496,6 +526,8 @@ export default function App() {
     transactions: 20,
   });
 
+  const [yearlyTrendData, setYearlyTrendData] = useState([]);
+  const [yearlyTrendLoading, setYearlyTrendLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [benchmark, setBenchmark] = useState(null);
   const [benchmarkLoading, setBenchmarkLoading] = useState(false);
@@ -521,6 +553,7 @@ export default function App() {
   sort_by: "newest",
   facilities: [],
 });
+
 
 const [finderResults, setFinderResults] = useState(null);
 const [finderLoading, setFinderLoading] = useState(false);
@@ -654,6 +687,8 @@ const [finderLoading, setFinderLoading] = useState(false);
     }
   };
 
+
+
   const fetchMarketTrendAreas = async (stateName) => {
     if (!stateName) return;
 
@@ -709,7 +744,29 @@ const [finderLoading, setFinderLoading] = useState(false);
 
   const selectedStateSummary =
     marketStatesData.find((item) => item.State === selectedTrendState) || null;
+ 
+  const fetchYearlyTrend = async (stateName) => {
+  setYearlyTrendLoading(true);
 
+  try {
+    const response = await fetch(
+      `http://127.0.0.1:5000/market-trends/yearly/${encodeURIComponent(stateName)}`
+    );
+
+    const payload = await response.json();
+
+    if (!response.ok) {
+      throw new Error(payload?.error || "Yearly trend fetch failed");
+    }
+
+    setYearlyTrendData(payload.data || []);
+  } catch (error) {
+    console.error("Could not fetch yearly trend", error);
+    setYearlyTrendData([]);
+  } finally {
+    setYearlyTrendLoading(false);
+  }
+};
 
   const fetchMarketSnapshot = async () => {
     try {
@@ -833,6 +890,12 @@ const [finderLoading, setFinderLoading] = useState(false);
       fetchMarketBenchmark();
     }
   }, [activeTab, benchmark, benchmarkLoading]);
+
+  useEffect(() => {
+  if (activeTab === "trends") {
+    fetchYearlyTrend(selectedTrendState);
+  }
+}, [activeTab, selectedTrendState]);
 
   useEffect(() => {
     if (activeTab === "trends" && marketStatesData.length === 0) {
@@ -1667,17 +1730,77 @@ const loadAdminData = async () => {
                   </button>
                 </div>
 
+  <div className="card trends-chart-card yearly-forecast-card">
+  <div className="trends-card-head">
+    <div>
+      <h3>Yearly Price Forecast 2025–2030</h3>
+     <p className="muted">
+  Live yearly projection calculated from the current dataset baseline for{" "}
+  {selectedTrendState}.
+</p>
+
+<select
+  value={selectedTrendState}
+  onChange={(e) => setSelectedTrendState(e.target.value)}
+  style={{
+    width: "260px",
+    marginTop: "18px",
+    padding: "12px",
+    borderRadius: "12px",
+    background: "#111827",
+    color: "white",
+    border: "1px solid #334155",
+  }}
+>
+  {(marketStatesData.length
+    ? marketStatesData.map((item) => item.State)
+    : states
+  ).map((state) => (
+    <option key={state} value={state}>
+      {state}
+    </option>
+  ))}
+</select>
+    </div>
+  </div>
+
+  {yearlyTrendLoading ? (
+    <div className="placeholder-box">
+      Calculating yearly forecast...
+    </div>
+  ) : (
+    <YearlyPredictionChart data={yearlyTrendData} />
+  )}
+</div>
+
                 <div className="stack">
                   <div className="card trends-chart-card">
                     <div className="trends-card-head">
                       <div>
-                        <h3>Overall Housing Price Estimation by State</h3>
+                        <h3>Overall Housing Price Estimation by State </h3>
                         <p className="muted">
-                          This line graph uses the dataset average and median prices for all
+                          This line graph uses the dataset average and median prices for all in the year 2025
                           available Malaysian states. Hover on each point to view exact values.
                         </p>
                       </div>
                     </div>
+
+                    <div className="friendly-field yearly-state-picker">
+  <label>Forecast State</label>
+  <select
+    value={selectedTrendState}
+    onChange={(e) => setSelectedTrendState(e.target.value)}
+  >
+    {(marketStatesData.length
+      ? marketStatesData.map((item) => item.State)
+      : states
+    ).map((state) => (
+      <option key={state} value={state}>
+        {state}
+      </option>
+    ))}
+  </select>
+</div>
 
                     {marketTrendLoading && marketStatesData.length === 0 ? (
                       <div className="placeholder-box">Loading state graph data...</div>

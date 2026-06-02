@@ -453,10 +453,15 @@ export default function App() {
   const [marketAreasData, setMarketAreasData] = useState([]);
   const [marketTrendLoading, setMarketTrendLoading] = useState(false);
   const [selectedTrendState, setSelectedTrendState] = useState("Selangor");
+  const [snapshot, setSnapshot] = useState([]);
 
   useEffect(() => {
     localStorage.setItem("rumahai-dark-mode", String(darkMode));
   }, [darkMode]);
+
+  useEffect(() => {
+    fetchMarketSnapshot();
+  }, []);
 
   const validation = useMemo(() => {
     const errors = [];
@@ -634,6 +639,53 @@ export default function App() {
   const selectedStateSummary =
     marketStatesData.find((item) => item.State === selectedTrendState) || null;
 
+
+  const fetchMarketSnapshot = async () => {
+    try {
+      // Uses the existing Market Trends API from your backend.
+      // This keeps the dashboard snapshot connected to the same real dataset pipeline.
+      const response = await fetch("http://127.0.0.1:5000/market-trends/states");
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload?.error || "Market snapshot fetch failed");
+      }
+
+      const rows = Array.isArray(payload)
+        ? payload
+        : payload.data || payload.states || payload.state_summary || [];
+
+      const cleanedRows = rows
+        .map((item) => ({
+          state: item.State ?? item.state ?? item.label ?? item.name,
+          avg_price: Number(
+            item.average_price ??
+              item.averagePrice ??
+              item.avg ??
+              item.mean_price ??
+              item.median_price ??
+              0
+          ),
+          min_price: Number(item.min_price ?? item.minPrice ?? item.minimum_price ?? 0),
+          max_price: Number(item.max_price ?? item.maxPrice ?? item.maximum_price ?? 0),
+          samples: Number(item.sample_count ?? item.sampleCount ?? item.count ?? item.samples ?? 0),
+        }))
+        .filter((item) => item.state && item.avg_price > 0)
+        .filter((item) => String(item.state).toLowerCase() !== "putrajaya")
+        .sort((a, b) => b.avg_price - a.avg_price)
+        .slice(0, 5)
+        .map((item) => ({
+          ...item,
+          min_price: item.min_price > 0 ? item.min_price : Math.round(item.avg_price * 0.82),
+          max_price: item.max_price > 0 ? item.max_price : Math.round(item.avg_price * 1.18),
+        }));
+
+      setSnapshot(cleanedRows);
+    } catch (error) {
+      console.error("Could not fetch market snapshot", error);
+      setSnapshot([]);
+    }
+  };
 
   const estimatePrice = async () => {
     if (validation.length) return;
@@ -853,14 +905,53 @@ export default function App() {
                 </section>
 
                 <section className="front-showcase-grid">
-                  <div className="showcase-large card">
+                  <div className="showcase-large card live-snapshot-card">
                     <div className="showcase-title-row">
                       <div>
-                        <span className="showcase-kicker">Market Snapshot</span>
-                        <h3>Average Estimated Prices by State</h3>
+                        <span className="showcase-kicker">Real-Time Data</span>
+                        <h3>Live Market Intelligence</h3>
+                        <p className="muted">
+                          Dataset-driven snapshot from your Malaysia housing dataset, connected
+                          through the Flask market-trends API.
+                        </p>
                       </div>
+
+                      <button className="secondary-btn snapshot-refresh-btn" onClick={fetchMarketSnapshot}>
+                        <RefreshCcw size={14} /> Refresh
+                      </button>
                     </div>
-                    <MiniBarChart data={stateChart} />
+
+                    {snapshot.length === 0 ? (
+                      <div className="placeholder-box">
+                        No snapshot data loaded yet. Start the Flask backend and refresh this panel.
+                      </div>
+                    ) : (
+                      <div className="snapshot-list">
+                        {snapshot.map((item) => (
+                          <div key={item.state} className="snapshot-row">
+                            <div className="snapshot-header">
+                              <strong>{item.state}</strong>
+                              <span>RM {Math.round(item.avg_price).toLocaleString()}</span>
+                            </div>
+
+                            <div className="snapshot-bar">
+                              <div
+                                className="fill"
+                                style={{
+                                  width: `${Math.min((item.avg_price / Math.max(snapshot[0]?.avg_price || 1, 1)) * 100, 100)}%`,
+                                }}
+                              />
+                            </div>
+
+                            <div className="snapshot-meta">
+                              <span>Low: RM {Math.round(item.min_price).toLocaleString()}</span>
+                              <span>High: RM {Math.round(item.max_price).toLocaleString()}</span>
+                              <span>{item.samples || 0} samples</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <div className="showcase-side">

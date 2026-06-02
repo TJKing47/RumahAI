@@ -237,3 +237,19 @@ def market_trends_areas(state):
 
 if __name__ == "__main__":
     app.run(debug=True, host="127.0.0.1", port=5000)
+
+@app.get("/market-snapshot")
+def market_snapshot():
+    import pandas as pd
+
+    df = pd.read_csv("malaysia_house_price_data_2025.csv")
+
+    summary = (
+        df.groupby("State")["Median_Price"]
+        .agg(["mean", "min", "max", "count"])
+        .reset_index()
+    )
+
+    summary.columns = ["state", "avg_price", "min_price", "max_price", "samples"]
+
+    return summary.to_dict(orient="records")

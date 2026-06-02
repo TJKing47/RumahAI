@@ -263,8 +263,8 @@ body,
 }
 
 .muted {
-  color: #64748b;
-  line-height: 1.45;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 .small-muted {
@@ -611,7 +611,8 @@ select {
   background: #eef2ff;
   color: #4338ca;
   font-weight: 700;
-  font-size: 0.85rem;
+  font-size: 14px;
+  padding: 4px 10px;
 }
 
 .front-hero-actions {
@@ -737,8 +738,9 @@ select {
   align-items: stretch;
 }
 
-.showcase-large {
-  padding: 30px;
+.showcase-large h3 {
+  font-size: 26px;
+  font-weight: 600;
 }
 
 .showcase-title-row {
@@ -1575,3 +1577,37 @@ select {
   color: #0f172a;
 }
 
+.snapshot-row {
+  margin-bottom: 18px;
+}
+
+.snapshot-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 16px;
+}
+
+.snapshot-bar {
+  height: 6px;
+  background: #1f2a44;
+  border-radius: 4px;
+  margin: 6px 0;
+}
+
+.snapshot-bar .fill {
+  height: 100%;
+  background: linear-gradient(90deg, #7c5cff, #00d4ff);
+  border-radius: 4px;
+}
+
+.snapshot-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  opacity: 12px;
+}
+
+.snapshot-header span {
+  font-size: 15px;
+  font-weight: 600;
+}

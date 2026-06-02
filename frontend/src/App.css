@@ -1611,3 +1611,157 @@ select {
   font-size: 15px;
   font-weight: 600;
 }
+/* ===== House Finder Polish ===== */
+
+.two-grid {
+  align-items: flex-start;
+}
+
+.card h3 {
+  text-align: center;
+}
+
+.friendly-field label {
+  font-size: 0.95rem;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.friendly-field input,
+.friendly-field select {
+  height: 48px;
+  border-radius: 14px;
+  font-size: 0.95rem;
+}
+
+.finder-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.finder-tags .choice-pill {
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  transition: 0.2s ease;
+}
+
+.finder-tags .choice-pill:hover {
+  transform: translateY(-2px);
+}
+
+.predict-action-row {
+  justify-content: center;
+  margin-top: 22px;
+}
+
+.big-action-btn {
+  min-width: 190px;
+}
+
+/* Result cards */
+.chart-list {
+  display: grid;
+  gap: 16px;
+}
+
+.chart-list .mini-box {
+  padding: 22px;
+  border-radius: 22px;
+  text-align: left;
+  transition: 0.2s ease;
+}
+
+.chart-list .mini-box:hover {
+  transform: translateY(-3px);
+  background: rgba(99, 102, 241, 0.18);
+}
+
+.chart-list .mini-box strong {
+  font-size: 1.05rem;
+  display: block;
+  margin-bottom: 10px;
+}
+
+.chart-list .mini-box .small-muted {
+  display: block;
+  margin-top: 8px;
+  font-size: 0.92rem;
+}
+
+.chart-list .mini-box a {
+  display: inline-block;
+  margin-top: 14px !important;
+  padding: 9px 14px;
+  border-radius: 999px;
+  background: rgba(139, 92, 246, 0.18);
+  color: #c4b5fd;
+  text-decoration: none;
+}
+
+.chart-list .mini-box a:hover {
+  background: rgba(139, 92, 246, 0.3);
+}
+
+/* Make House Finder page breathe better */
+.section-head h2 {
+  font-size: 2rem;
+}
+
+.section-head p {
+  font-size: 1rem;
+}
+
+.placeholder-box {
+  font-size: 1rem;
+}
+
+/* Optional: make both panels balanced */
+.two-grid > .card {
+  min-height: 620px;
+}
+
+.brand-icon {
+  border: 0;
+  cursor: pointer;
+}
+
+.brand-icon:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.1);
+}
+
+.error-box {
+  margin-top: 12px;
+}
+
+.account-login-wrap {
+  display: flex;
+  justify-content: center;
+}
+
+.account-login-card {
+  width: min(720px, 100%);
+  min-height: auto !important;
+}
+
+.account-benefits {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.account-benefits span {
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: #a7b7d8;
+  background: rgba(148, 163, 184, 0.12);
+  border-radius: 999px;
+  padding: 8px 12px;
+}

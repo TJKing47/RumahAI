@@ -16,6 +16,9 @@ import {
   ChevronRight,
   BadgeDollarSign,
   LineChart,
+  SlidersHorizontal,
+  Filter,
+  ExternalLink,
   Images,
   RefreshCcw,
   Moon,
@@ -39,8 +42,8 @@ const tabs = [
   { id: "dashboard", label: "Dashboard", icon: Home },
   { id: "predict", label: "Predict", icon: BadgeDollarSign },
   { id: "trends", label: "Market Trends", icon: LineChart },
-  { id: "about", label: "About Project", icon: Info },
-  { id: "profile", label: "My Info", icon: User },
+  { id: "about", label: "House Finder", icon: Search },
+  { id: "account", label: "Login / Account", icon: User },
 ];
 
 const states = [
@@ -67,6 +70,29 @@ const propertyTypes = [
 ];
 
 const tenures = ["Freehold", "Leasehold"];
+
+const finderFacilities = [
+   "Parking",
+  "Security",
+  "Lift",
+  "Swimming Pool",
+  "Playground",
+  "Gymnasium",
+  "Barbeque Area",
+  "Multipurpose Hall",
+  "Balcony",
+  "Air Conditioning",
+  "Fully Furnished",
+  "Partially Furnished",
+  "Unfurnished",
+  "Gated & Guarded",
+  "24 Hour Security",
+  "Mini Market",
+  "Surau",
+  "Near MRT",
+  "Corner Lot",
+  "Renovated",
+];
 
 const stateChart = [
   { label: "Kuala Lumpur", avg: 820000 },
@@ -436,6 +462,30 @@ export default function App() {
   const [darkMode, setDarkMode] = useState(() => {
     return localStorage.getItem("rumahai-dark-mode") === "true";
   });
+  const [authMode, setAuthMode] = useState("login");
+
+  const [authForm, setAuthForm] = useState({
+    name: "",
+    email: "",
+    password: "",
+  });
+
+  const [authToken, setAuthToken] = useState(
+    () => localStorage.getItem("rumahai-token") || ""
+  );
+
+  const [currentUser, setCurrentUser] = useState(() => {
+    const saved = localStorage.getItem("rumahai-user");
+    return saved ? JSON.parse(saved) : null;
+  });
+
+  const [authError, setAuthError] = useState("");
+
+  const [savedSearches, setSavedSearches] = useState([]);
+
+  const [adminUsers, setAdminUsers] = useState([]);
+
+  const [adminLogs, setAdminLogs] = useState([]);
 
   const [form, setForm] = useState({
     State: "Selangor",
@@ -454,10 +504,31 @@ export default function App() {
   const [marketTrendLoading, setMarketTrendLoading] = useState(false);
   const [selectedTrendState, setSelectedTrendState] = useState("Selangor");
   const [snapshot, setSnapshot] = useState([]);
+  const [finderForm, setFinderForm] = useState({
+  keyword: "",
+  state: "Selangor",
+  property_type: "Condominium",
+  tenure: "",
+  min_price: "",
+  max_price: "",
+  min_sqft: "",
+  max_sqft: "",
+  bedrooms: "",
+  bathrooms: "",
+  carparks: "",
+  floor_range: "",
+  furnishing: "",
+  sort_by: "newest",
+  facilities: [],
+});
+
+const [finderResults, setFinderResults] = useState(null);
+const [finderLoading, setFinderLoading] = useState(false);
 
   useEffect(() => {
     localStorage.setItem("rumahai-dark-mode", String(darkMode));
   }, [darkMode]);
+  
 
   useEffect(() => {
     fetchMarketSnapshot();
@@ -775,6 +846,115 @@ export default function App() {
     }
   }, [activeTab, selectedTrendState]);
 
+  const searchHouses = async () => {
+  setFinderLoading(true);
+  setFinderResults(null);
+
+  try {
+    const response = await fetch("http://127.0.0.1:5000/search-houses", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(finderForm),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      alert(data.error || "House search failed");
+      setFinderResults({ count: 0, listings: [] });
+      return;
+    }
+
+    setFinderResults(data);
+  } catch (error) {
+    console.error("Could not search houses", error);
+    alert("Could not connect to Flask backend.");
+    setFinderResults({ count: 0, listings: [] });
+  } finally {
+    setFinderLoading(false);
+  }
+};
+
+const toggleFacility = (tag) => {
+  setFinderForm((prev) => ({
+    ...prev,
+    facilities: prev.facilities.includes(tag)
+      ? prev.facilities.filter((item) => item !== tag)
+      : [...prev.facilities, tag],
+  }));
+};
+
+const authHeaders = () => ({
+  "Content-Type": "application/json",
+  Authorization: `Bearer ${authToken}`,
+});
+
+const handleAuth = async () => {
+  setAuthError("");
+  try {
+    const endpoint = authMode === "login" ? "/auth/login" : "/auth/register";
+    const response = await fetch(`http://127.0.0.1:5000${endpoint}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(authForm),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      setAuthError(data.error || "Authentication failed");
+      return;
+    }
+    setAuthToken(data.token);
+    setCurrentUser(data.user);
+    localStorage.setItem("rumahai-token", data.token);
+    localStorage.setItem("rumahai-user", JSON.stringify(data.user));
+  } catch {
+    setAuthError("Could not connect to backend");
+  }
+};
+
+const logout = () => {
+  setAuthToken("");
+  setCurrentUser(null);
+  localStorage.removeItem("rumahai-token");
+  localStorage.removeItem("rumahai-user");
+};
+
+const saveCurrentSearch = async () => {
+  if (!currentUser) {
+    alert("Please login first.");
+    return;
+  }
+  const name = prompt("Name this search:", "My House Search");
+  if (!name) return;
+  const response = await fetch("http://127.0.0.1:5000/user/saved-searches", {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ search_name: name, filters: finderForm }),
+  });
+  const data = await response.json();
+  alert(data.message || "Saved.");
+};
+
+const loadSavedSearches = async () => {
+  if (!authToken) return;
+  const response = await fetch("http://127.0.0.1:5000/user/saved-searches", {
+    headers: authHeaders(),
+  });
+  const data = await response.json();
+  setSavedSearches(data.saved_searches || []);
+};
+
+const loadAdminData = async () => {
+  if (!authToken || currentUser?.role !== "admin") return;
+  const usersRes = await fetch("http://127.0.0.1:5000/admin/users", { headers: authHeaders() });
+  const usersData = await usersRes.json();
+  setAdminUsers(usersData.users || []);
+
+  const logsRes = await fetch("http://127.0.0.1:5000/admin/logs", { headers: authHeaders() });
+  const logsData = await logsRes.json();
+  setAdminLogs(logsData.logs || []);
+};
+
   const resetForm = () => {
     setForm({
       State: "Selangor",
@@ -793,9 +973,14 @@ export default function App() {
       <div className="main-wrap">
         <div className="topbar card">
           <div className="brand">
-            <div className="brand-icon">
-              <Home size={28} />
-            </div>
+           <button
+  className="brand-icon"
+  type="button"
+  onClick={() => setActiveTab("account")}
+  title={currentUser ? `Logged in as ${currentUser.name}` : "Login / Account"}
+>
+  <User size={28} />
+</button>
             <div>
               <div className="brand-row">
                 <h1>RumahAI</h1>
@@ -1064,23 +1249,101 @@ export default function App() {
                           </select>
                         </div>
 
-                        <div className="friendly-field">
-                          <label>Ownership Type</label>
-                          <div className="toggle-row">
-                            {tenures.map((t) => (
-                              <motion.button
-                                key={t}
-                                type="button"
-                                whileHover={{ y: -2 }}
-                                whileTap={{ scale: 0.98 }}
-                                className={`toggle-pill ${form.Tenure === t ? "active" : ""}`}
-                                onClick={() => setForm({ ...form, Tenure: t })}
-                              >
-                                {t}
-                              </motion.button>
-                            ))}
-                          </div>
-                        </div>
+                     <div className="friendly-field">
+  <label>Bedrooms</label>
+  <select
+    value={finderForm.bedrooms}
+    onChange={(e) =>
+      setFinderForm({ ...finderForm, bedrooms: e.target.value })
+    }
+  >
+    <option value="">Any</option>
+    <option value="1">1+</option>
+    <option value="2">2+</option>
+    <option value="3">3+</option>
+    <option value="4">4+</option>
+    <option value="5">5+</option>
+  </select>
+</div>
+
+<div className="friendly-field">
+  <label>Bathrooms</label>
+  <select
+    value={finderForm.bathrooms}
+    onChange={(e) =>
+      setFinderForm({ ...finderForm, bathrooms: e.target.value })
+    }
+  >
+    <option value="">Any</option>
+    <option value="1">1+</option>
+    <option value="2">2+</option>
+    <option value="3">3+</option>
+    <option value="4">4+</option>
+  </select>
+</div>
+
+<div className="friendly-field">
+  <label>Car Parks</label>
+  <select
+    value={finderForm.carparks}
+    onChange={(e) =>
+      setFinderForm({ ...finderForm, carparks: e.target.value })
+    }
+  >
+    <option value="">Any</option>
+    <option value="1">1+</option>
+    <option value="2">2+</option>
+    <option value="3">3+</option>
+    <option value="4">4+</option>
+  </select>
+</div>
+
+<div className="friendly-field">
+  <label>Floor Range</label>
+  <select
+    value={finderForm.floor_range}
+    onChange={(e) =>
+      setFinderForm({ ...finderForm, floor_range: e.target.value })
+    }
+  >
+    <option value="">Any</option>
+    <option value="Low">Low Floor</option>
+    <option value="Medium">Medium Floor</option>
+    <option value="High">High Floor</option>
+  </select>
+</div>
+
+<div className="friendly-field">
+  <label>Furnishing</label>
+  <select
+    value={finderForm.furnishing}
+    onChange={(e) =>
+      setFinderForm({ ...finderForm, furnishing: e.target.value })
+    }
+  >
+    <option value="">Any</option>
+    <option value="Fully Furnished">Fully Furnished</option>
+    <option value="Partially Furnished">Partially Furnished</option>
+    <option value="Unfurnished">Unfurnished</option>
+  </select>
+</div>
+
+<div className="friendly-field">
+  <label>Sort By</label>
+  <select
+    value={finderForm.sort_by}
+    onChange={(e) =>
+      setFinderForm({ ...finderForm, sort_by: e.target.value })
+    }
+  >
+    <option value="newest">Newest Listings</option>
+    <option value="price_low">Lowest Price</option>
+    <option value="price_high">Highest Price</option>
+    <option value="size_large">Largest Size</option>
+    <option value="size_small">Smallest Size</option>
+    <option value="best_value">Best Value RM/sqft</option>
+  </select>
+</div>
                       </div>
 
                       <div className="predict-slider-grid">
@@ -1486,50 +1749,391 @@ export default function App() {
             )}
 
             {activeTab === "about" && (
-              <motion.div
-                key="about"
-                initial={{ opacity: 0, y: 14 }}
-                animate={{ opacity: 1, y: 0 }}
+  <motion.div
+    key="about"
+    initial={{ opacity: 0, y: 14 }}
+    animate={{ opacity: 1, y: 0 }}
+  >
+    <div className="section-head">
+      <div>
+        <h2>House Finder</h2>
+        <p>Search Mudah.my listings using filters and tags.</p>
+      </div>
+
+      <button className="secondary-btn" onClick={searchHouses}>
+        <Search size={16} /> Search Houses
+      </button>
+    </div>
+
+    <div className="two-grid">
+      <div className="card">
+        <h3>Search Filters</h3>
+
+        <div className="predict-grid-friendly">
+          <div className="friendly-field">
+            <label>Keyword / Area</label>
+            <input
+              type="text"
+              value={finderForm.keyword}
+              placeholder="Kajang, Casa Villa, Ampang"
+              onChange={(e) =>
+                setFinderForm({ ...finderForm, keyword: e.target.value })
+              }
+            />
+          </div>
+
+          <div className="friendly-field">
+            <label>State</label>
+            <select
+              value={finderForm.state}
+              onChange={(e) =>
+                setFinderForm({ ...finderForm, state: e.target.value })
+              }
+            >
+              {states.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="friendly-field">
+            <label>Property Type</label>
+            <select
+              value={finderForm.property_type}
+              onChange={(e) =>
+                setFinderForm({
+                  ...finderForm,
+                  property_type: e.target.value,
+                })
+              }
+            >
+              {propertyTypes.map((type) => (
+                <option key={type} value={type}>
+                  {type}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="friendly-field">
+            <label>Tenure</label>
+            <select
+              value={finderForm.tenure}
+              onChange={(e) =>
+                setFinderForm({ ...finderForm, tenure: e.target.value })
+              }
+            >
+              <option value="">Any tenure</option>
+              {tenures.map((tenure) => (
+                <option key={tenure} value={tenure}>
+                  {tenure}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="friendly-field">
+            <label>Min Price</label>
+            <input
+              type="number"
+              value={finderForm.min_price}
+              placeholder="300000"
+              onChange={(e) =>
+                setFinderForm({ ...finderForm, min_price: e.target.value })
+              }
+            />
+          </div>
+
+          <div className="friendly-field">
+            <label>Max Price</label>
+            <input
+              type="number"
+              value={finderForm.max_price}
+              placeholder="600000"
+              onChange={(e) =>
+                setFinderForm({ ...finderForm, max_price: e.target.value })
+              }
+            />
+          </div>
+
+          <div className="friendly-field">
+            <label>Min Size</label>
+            <input
+              type="number"
+              value={finderForm.min_sqft}
+              placeholder="800"
+              onChange={(e) =>
+                setFinderForm({ ...finderForm, min_sqft: e.target.value })
+              }
+            />
+          </div>
+
+          <div className="friendly-field">
+            <label>Max Size</label>
+            <input
+              type="number"
+              value={finderForm.max_sqft}
+              placeholder="1800"
+              onChange={(e) =>
+                setFinderForm({ ...finderForm, max_sqft: e.target.value })
+              }
+            />
+          </div>
+        </div>
+
+        <div className="finder-tags" style={{ marginTop: "18px" }}>
+          {finderFacilities.map((tag) => (
+            <button
+              key={tag}
+              type="button"
+              className={`choice-pill ${
+                finderForm.facilities.includes(tag) ? "active" : ""
+              }`}
+              onClick={() => toggleFacility(tag)}
+            >
+              {tag}
+            </button>
+          ))}
+        </div>
+
+        <div className="predict-action-row">
+          <button
+            className="primary-btn big-action-btn"
+            onClick={searchHouses}
+            disabled={finderLoading}
+          >
+            {finderLoading ? "Searching..." : "Search Live Listings"}
+          </button>
+
+          <button
+            className="secondary-btn"
+            onClick={() => {
+              setFinderForm({
+                keyword: "",
+                state: "Selangor",
+                property_type: "Condominium",
+                tenure: "",
+                min_price: "",
+                max_price: "",
+                min_sqft: "",
+                max_sqft: "",
+                facilities: [],
+              });
+              setFinderResults(null);
+            }}
+          >
+            Clear Filters
+          </button>
+        </div>
+      </div>
+
+      <div className="card">
+        <h3>Matching Properties</h3>
+
+        {finderLoading ? (
+          <div className="placeholder-box">Searching Mudah.my listings...</div>
+        ) : finderResults?.listings?.length ? (
+          <div className="chart-list">
+            {finderResults.listings.map((item, index) => (
+              <div
+                key={`${item.url || item.title}-${index}`}
+                className="mini-box"
               >
-                <div className="section-head">
-                  <div>
-                    <h2>About RumahAI</h2>
-                    <p>A professional project overview section for your lecturer or evaluator.</p>
-                  </div>
+                <strong>{item.title || item.location || "Property Listing"}</strong>
+
+                <span className="small-muted">
+                  {item.location || "Location unavailable"}
+                </span>
+
+                <span className="small-muted">
+                  {currency(item.price)}
+                  {item.sqft ? ` • ${Math.round(item.sqft)} sq ft` : ""}
+                  {item.tenure ? ` • ${item.tenure}` : ""}
+                  {item.property_type ? ` • ${item.property_type}` : ""}
+                </span>
+
+                {item.url && (
+                  <a
+                    href={item.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ marginTop: "8px", fontWeight: 700 }}
+                  >
+                    Open listing
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : finderResults ? (
+          <div className="placeholder-box">
+            No matching listings found. Try widening your budget or removing some tags.
+          </div>
+        ) : (
+          <div className="placeholder-box">
+            Choose filters and click Search Live Listings.
+          </div>
+        )}
+      </div>
+    </div>
+  </motion.div>
+)}
+
+{activeTab === "account" && (
+  <motion.div
+    key="account"
+    initial={{ opacity: 0, y: 14 }}
+    animate={{ opacity: 1, y: 0 }}
+  >
+    <div className="section-head">
+      <div>
+        <h2>{currentUser ? "My Account" : "Login / Register"}</h2>
+        <p>Login to save house searches, preferences, and access admin tools.</p>
+      </div>
+    </div>
+
+   {!currentUser ? (
+  <div className="account-login-wrap">
+    <div className="card account-login-card">
+      <h3>{authMode === "login" ? "Login" : "Create Account"}</h3>
+
+      {authMode === "register" && (
+        <div className="friendly-field">
+          <label>Name</label>
+          <input
+            value={authForm.name}
+            onChange={(e) =>
+              setAuthForm({ ...authForm, name: e.target.value })
+            }
+            placeholder="Your name"
+          />
+        </div>
+      )}
+
+      <div className="friendly-field">
+        <label>Email</label>
+        <input
+          value={authForm.email}
+          onChange={(e) =>
+            setAuthForm({ ...authForm, email: e.target.value })
+          }
+          placeholder="email@example.com"
+        />
+      </div>
+
+      <div className="friendly-field">
+        <label>Password</label>
+        <input
+          type="password"
+          value={authForm.password}
+          onChange={(e) =>
+            setAuthForm({ ...authForm, password: e.target.value })
+          }
+          placeholder="Minimum 6 characters"
+        />
+      </div>
+
+      {authError && <div className="error-box">{authError}</div>}
+
+      <div className="predict-action-row">
+        <button className="primary-btn big-action-btn" onClick={handleAuth}>
+          {authMode === "login" ? "Login" : "Register"}
+        </button>
+
+        <button
+          className="secondary-btn"
+          onClick={() =>
+            setAuthMode(authMode === "login" ? "register" : "login")
+          }
+        >
+          {authMode === "login" ? "Create Account" : "Back to Login"}
+        </button>
+      </div>
+    </div>
+  </div>
+) : (
+      <div className="two-grid">
+        <div className="card">
+          <h3>Welcome, {currentUser.name}</h3>
+          <p className="muted">{currentUser.email}</p>
+          <p className="muted">Role: {currentUser.role}</p>
+
+          <div className="predict-action-row">
+            <button className="primary-btn" onClick={saveCurrentSearch}>
+              Save Current House Search
+            </button>
+
+            <button className="secondary-btn" onClick={loadSavedSearches}>
+              Load Saved Searches
+            </button>
+
+            <button className="secondary-btn" onClick={logout}>
+              Logout
+            </button>
+          </div>
+        </div>
+
+        <div className="card">
+          <h3>{currentUser.role === "admin" ? "Admin Tools" : "Saved Searches"}</h3>
+          {savedSearches.length ? (
+            <div className="chart-list">
+              {savedSearches.map((item) => (
+                <div key={item.id} className="mini-box">
+                  <strong>{item.search_name}</strong>
+                  <span className="small-muted">{item.created_at}</span>
+                  <button
+                    className="secondary-btn"
+                    onClick={() => {
+                      setFinderForm(item.filters);
+                      setActiveTab("about");
+                    }}
+                  >
+                    Use Search
+                  </button>
                 </div>
+              ))}
+            </div>
+          ) : (
+            <div className="placeholder-box">No saved searches loaded yet.</div>
+          )}
+        </div>
 
-                <div className="two-grid">
-                  <div className="card">
-                    <h3>Project Summary</h3>
-                    <p>
-                      RumahAI is a Malaysia-focused house price estimation web application designed
-                      to support transparent, data-driven valuation. Users enter key housing
-                      attributes and receive an estimated market price through a clean and
-                      interactive interface.
-                    </p>
-                    <p>
-                      This frontend can later be connected to your trained machine learning model,
-                      Flask API, or other backend architecture.
-                    </p>
-                  </div>
+        {currentUser.role === "admin" && (
+          <div className="card" style={{ gridColumn: "1 / -1" }}>
+            <h3>Admin Panel</h3>
+            <button className="secondary-btn" onClick={loadAdminData}>
+              Load Users & Logs
+            </button>
 
-                  <div className="card info-card">
-                    <h3>Why RumahAI?</h3>
-                    <p className="muted info-copy">
-                      RumahAI helps users understand estimated property value using a cleaner, more
-                      transparent interface focused on price guidance, market comparison, and future outlook.
-                    </p>
-
-                    <div className="info-pills">
-                      <span>Real-time estimate</span>
-                      <span>Malaysia-focused</span>
-                      <span>Explainable output</span>
-                      <span>Interactive interface</span>
-                    </div>
-                  </div>
+            <h4>Users</h4>
+            <div className="chart-list">
+              {adminUsers.map((u) => (
+                <div key={u.id} className="mini-box">
+                  <strong>{u.name} ({u.role})</strong>
+                  <span className="small-muted">{u.email}</span>
+                  <span className="small-muted">Status: {u.is_active ? "Active" : "Disabled"}</span>
                 </div>
-              </motion.div>
-            )}
+              ))}
+            </div>
+
+            <h4>System Logs</h4>
+            <div className="chart-list">
+              {adminLogs.map((log) => (
+                <div key={log.id} className="mini-box">
+                  <strong>{log.action}</strong>
+                  <span className="small-muted">{log.details}</span>
+                  <span className="small-muted">{log.created_at}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    )}
+  </motion.div>
+)}
 
             {activeTab === "profile" && (
               <motion.div
@@ -1544,8 +2148,8 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="two-grid">
-                  <div className="card">
+                <div className="account-login-wrap">
+  <div className="card account-login-card">
                     <div className="profile-banner"></div>
                     <div className="profile-avatar">
                       <Images size={36} />

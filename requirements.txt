@@ -8,3 +8,5 @@ numpy>=1.24
 selenium
 requests
 beautifulsoup4
+flask-jwt-extended
+werkzeug

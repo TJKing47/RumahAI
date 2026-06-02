@@ -3,6 +3,10 @@ from __future__ import annotations
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
+from flask_jwt_extended import JWTManager
+from src.database import init_db
+from src.auth_routes import auth_bp
+
 from src.modeling import (
     get_model_explanation,
     load_artifacts,
@@ -14,6 +18,10 @@ from src.scrapers.mudah_scraper_selenium import summarize_mudah_benchmark
 
 app = Flask(__name__)
 CORS(app)
+app.config["JWT_SECRET_KEY"] = "change-this-secret-key-before-final-demo"
+jwt = JWTManager(app)
+init_db()
+app.register_blueprint(auth_bp)
 
 
 def compute_market_adjusted_price(
@@ -234,6 +242,83 @@ def market_trends_areas(state):
             "error": f"Area market trends failed: {str(e)}"
         }), 500
 
+def parse_float_or_none(value):
+    if value in (None, "", "null"):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+@app.post("/search-houses")
+def search_houses():
+    try:
+        data = request.get_json() or {}
+
+        state = data.get("state") or data.get("State")
+        property_type = data.get("property_type") or data.get("Type")
+        tenure = str(data.get("tenure") or "").strip().lower()
+        keyword = str(data.get("keyword") or "").strip().lower()
+
+        min_price = parse_float_or_none(data.get("min_price"))
+        max_price = parse_float_or_none(data.get("max_price"))
+        min_sqft = parse_float_or_none(data.get("min_sqft"))
+        max_sqft = parse_float_or_none(data.get("max_sqft"))
+
+        benchmark = summarize_mudah_benchmark(
+            state=state,
+            property_type=property_type,
+            max_items=25,
+            use_selenium=True,
+            wait_seconds=5.0,
+        )
+
+        listings = benchmark.get("listings", []) if benchmark else []
+        filtered = []
+
+        for item in listings:
+            price = float(item.get("price") or 0)
+            sqft = float(item.get("sqft") or 0)
+
+            searchable_text = " ".join([
+                str(item.get("title") or ""),
+                str(item.get("location") or ""),
+                str(item.get("tenure") or ""),
+                str(item.get("property_type") or ""),
+            ]).lower()
+
+            if keyword and keyword not in searchable_text:
+                continue
+
+            if tenure and tenure not in searchable_text:
+                continue
+
+            if min_price is not None and price < min_price:
+                continue
+
+            if max_price is not None and price > max_price:
+                continue
+
+            if min_sqft is not None and sqft < min_sqft:
+                continue
+
+            if max_sqft is not None and sqft > max_sqft:
+                continue
+
+            filtered.append(item)
+
+        return jsonify({
+            "source": "Mudah",
+            "count": len(filtered),
+            "raw_listing_count": len(listings),
+            "listings": filtered,
+        })
+
+    except Exception as e:
+        return jsonify({
+            "error": f"House search failed: {str(e)}"
+        }), 500
 
 if __name__ == "__main__":
     app.run(debug=True, host="127.0.0.1", port=5000)
